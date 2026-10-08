@@ -1,0 +1,98 @@
+/* Shared base for all BlocksNet UI options. */
+:root {
+  --bg: #0b0d12;
+  --panel: #151922;
+  --panel-2: #1d2230;
+  --line: #2a3142;
+  --text: #e8ecf3;
+  --dim: #8c95a8;
+  --accent: #ffcc33;
+  --blue: #2f5bff;
+  --red: #e3343c;
+  --green: #27c24c;
+  --purple: #a63de0;
+  --yellow: #f2cf1d;
+  --safe-t: env(safe-area-inset-top, 0px);
+  --safe-b: env(safe-area-inset-bottom, 0px);
+  --safe-l: env(safe-area-inset-left, 0px);
+  --safe-r: env(safe-area-inset-right, 0px);
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+
+html, body {
+  height: 100%;
+  background: var(--bg);
+  color: var(--text);
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, Ubuntu, Cantarell, sans-serif;
+  overscroll-behavior: none;
+  overflow: hidden;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+}
+
+canvas { display: block; width: 100%; height: 100%; }
+button { font: inherit; color: inherit; border: 0; background: none; cursor: pointer; touch-action: none; }
+
+.hidden { display: none !important; }
+
+/* ---------- overlays */
+.bn-overlay {
+  position: fixed; inset: 0; z-index: 50;
+  display: flex; align-items: center; justify-content: center;
+  padding: calc(16px + var(--safe-t)) 16px calc(16px + var(--safe-b));
+  background: rgba(5, 7, 12, 0.78);
+  backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
+}
+.bn-panel {
+  width: 100%; max-width: 340px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  padding: 22px 18px 16px;
+  display: flex; flex-direction: column; gap: 12px;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+}
+.bn-logo {
+  font: 900 34px/1 "Arial Black", Impact, system-ui, sans-serif;
+  letter-spacing: -1px; text-align: center; color: #fff;
+  text-shadow: 0 2px 0 #2f5bff, 0 4px 0 #1a2f8c;
+}
+.bn-logo span { color: var(--red); text-shadow: 0 2px 0 #8a1218, 0 4px 0 #520a0e; }
+.bn-sub { text-align: center; color: var(--accent); font-weight: 700; font-size: 13px; text-transform: uppercase; letter-spacing: 0.12em; }
+.bn-hint { color: var(--dim); font-size: 13px; line-height: 1.45; text-align: center; }
+.bn-panel label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--dim); flex: 1; }
+.bn-panel input, .bn-panel select {
+  font: inherit; font-size: 16px; color: var(--text);
+  background: var(--panel-2); border: 1px solid var(--line); border-radius: 10px;
+  padding: 10px 12px; width: 100%;
+  -webkit-user-select: text; user-select: text;
+}
+.bn-row { display: flex; gap: 10px; }
+.bn-btn-primary {
+  background: var(--accent); color: #111; font-weight: 800; font-size: 16px;
+  padding: 14px; border-radius: 12px; touch-action: manipulation;
+}
+.bn-btn-ghost { color: var(--dim); padding: 8px; touch-action: manipulation; }
+.bn-back { color: var(--dim); text-align: center; font-size: 13px; text-decoration: none; }
+.bn-winlist { list-style: none; counter-reset: w; display: flex; flex-direction: column; gap: 4px; }
+.bn-winlist li {
+  counter-increment: w; display: flex; justify-content: space-between;
+  background: var(--panel-2); border-radius: 8px; padding: 8px 10px; font-size: 14px;
+}
+.bn-winlist li span::before { content: counter(w) ". "; color: var(--dim); }
+.bn-winlist li b { color: var(--accent); }
+
+/* ---------- log lines (shared colors) */
+.log-line { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.log-attack { color: #ff7a7a; }
+.log-special { color: #7ad7ff; }
+.log-self { color: #9be89b; }
+.log-lines { color: #ffd166; }
+.log-death { color: #ff5050; font-weight: 700; }
+.log-system { color: var(--accent); font-weight: 700; }
+.log-chat { color: #d6dcff; }
+.log-info { color: var(--dim); }
+
+.pressed { filter: brightness(1.5); transform: scale(0.96); }

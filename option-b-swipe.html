@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#07080c">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<link rel="manifest" href="manifest.webmanifest">
+<title>BlocksNet — B: Swipe</title>
+<link rel="stylesheet" href="css/common.css">
+<style>
+  /* Option B — "Swipe Focus": no buttons. The whole middle of the screen is a touch pad:
+     drag to move, tap to rotate, flick down to drop. Opponents live in a strip on top;
+     drag your special chip onto a player (or tap them) to fire it. */
+  body {
+    height: 100dvh; display: flex; flex-direction: column;
+    padding: var(--safe-t) var(--safe-r) var(--safe-b) var(--safe-l);
+    background: #07080c;
+  }
+  .opps { display: flex; gap: 6px; padding: 8px 10px 6px; height: 19dvh; min-height: 110px; }
+  .opp { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; border-radius: 8px; padding: 3px; background: #10131b; border: 1px solid transparent; transition: border-color .15s, transform .15s; }
+  .opp.armed { border-color: rgba(255,204,51,.55); }
+  .opp.drop-hover { border-color: var(--accent); transform: scale(1.06); background: #2a2410; }
+  .opp .tag { display: flex; align-items: center; gap: 3px; font-size: 10px; white-space: nowrap; overflow: hidden; }
+  .opp .tag b { width: 14px; height: 14px; border-radius: 50%; background: var(--blue); color: #fff; display: grid; place-items: center; font-size: 9px; flex: none; }
+  .opp .tag em { font-style: normal; color: var(--dim); overflow: hidden; text-overflow: ellipsis; }
+  .opp canvas { flex: 1; min-height: 0; }
+
+  .stage { flex: 1; min-height: 0; position: relative; touch-action: none; }
+  .stage canvas#meCanvas { position: absolute; inset: 0; }
+  .hud { display: flex; align-items: center; justify-content: space-between; padding: 0 14px; height: 40px; }
+  .hud .stat { font: 700 11px ui-monospace, Menlo, monospace; color: var(--dim); line-height: 1.3; }
+  .hud .stat b { font-size: 18px; color: var(--text); margin-left: 6px; }
+  .hud .next { width: 60px; height: 34px; }
+  .toasts { position: absolute; left: 0; right: 0; top: 34%; display: flex; flex-direction: column; align-items: center; gap: 6px; pointer-events: none; }
+  .toast { font-weight: 800; font-size: 15px; padding: 6px 12px; border-radius: 999px; background: rgba(0,0,0,0.7); border: 1px solid currentColor; animation: pop 1.6s ease forwards; }
+  @keyframes pop { 0% { opacity: 0; transform: scale(.7) } 12% { opacity: 1; transform: scale(1.08) } 25% { transform: scale(1) } 80% { opacity: 1 } 100% { opacity: 0; transform: translateY(-24px) } }
+  .help { position: absolute; bottom: 8px; left: 0; right: 0; text-align: center; font-size: 11px; color: rgba(255,255,255,0.28); pointer-events: none; }
+
+  .tray { display: flex; align-items: center; gap: 8px; padding: 8px 10px 10px; border-top: 1px solid var(--line); background: #0d1017; }
+  .chip { flex: none; width: 52px; height: 52px; border-radius: 12px; display: grid; place-items: center; font: 900 26px "Courier New", monospace; background: #14161c; border: 2px solid #333; touch-action: none; }
+  .chip.empty { color: #333; }
+  .chip.dragging { opacity: .35; }
+  .tray .info { flex: 1; min-width: 0; }
+  .tray .info b { font-size: 14px; display: block; }
+  .tray .info small { font-size: 11px; color: var(--dim); display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .tray .queue { height: 10px; margin-top: 4px; }
+  .tray .act { flex: none; height: 52px; padding: 0 12px; border-radius: 12px; background: var(--panel-2); border: 1px solid var(--line); font-size: 13px; font-weight: 700; touch-action: manipulation; }
+  .tray .act.me { color: var(--green); }
+  .ghost-chip { position: fixed; z-index: 30; width: 52px; height: 52px; margin: -26px 0 0 -26px; pointer-events: none; }
+</style>
+</head>
+<body>
+  <div class="opps" id="opps"></div>
+
+  <div class="hud">
+    <div class="stat">LINES<b id="lines">0</b></div>
+    <canvas class="next" id="next"></canvas>
+    <div class="stat" style="text-align:right">LEVEL<b id="level">1</b></div>
+  </div>
+
+  <div class="stage" id="stage">
+    <canvas id="meCanvas"></canvas>
+    <div class="toasts" id="toasts"></div>
+    <div class="help" id="help">drag ↔ move · tap rotate · drag ↓ soft drop · flick ↓ drop</div>
+  </div>
+
+  <div class="tray">
+    <div class="chip empty" id="chip">·</div>
+    <div class="info">
+      <b id="specName">No special</b>
+      <small id="specDesc">Clear lines to earn specials</small>
+      <canvas class="queue" id="queue"></canvas>
+    </div>
+    <button class="act me" id="useMe">Me</button>
+    <button class="act" id="toss">Toss</button>
+  </div>
+
+<script src="js/engine.js"></script>
+<script src="js/render.js"></script>
+<script src="js/app.js"></script>
+<script>
+(function () {
+  const R = BN.render;
+  const $ = id => document.getElementById(id);
+  let oppEls = [];
+  let geom = { s: 20, ox: 0, oy: 0 };
+
+  function buildOpps(app) {
+    const box = $('opps');
+    box.innerHTML = '';
+    oppEls = app.room.players.filter(p => p !== app.me).map(p => {
+      const el = document.createElement('div');
+      el.className = 'opp';
+      el.dataset.slot = p.slot;
+      el.innerHTML = `<div class="tag"><b>${p.slot}</b><em>${p.name}</em></div><canvas></canvas>`;
+      el.addEventListener('click', () => app.act.use(p.slot));
+      box.appendChild(el);
+      return { p, el, canvas: el.querySelector('canvas') };
+    });
+  }
+
+  function toast(text, color) {
+    const t = document.createElement('div');
+    t.className = 'toast';
+    t.style.color = color;
+    t.textContent = text;
+    $('toasts').appendChild(t);
+    setTimeout(() => t.remove(), 1600);
+    while ($('toasts').children.length > 3) $('toasts').firstChild.remove();
+  }
+
+  const app = BN.app({
+    title: 'Option B · Swipe Focus',
+    subtitle: 'Gesture-only and minimal chrome. Drag anywhere to move, tap to rotate (left half ↺, right half ↻), flick down to drop. Drag your special chip onto a player — or tap them.',
+    onSetup: buildOpps,
+    render(app) {
+      const me = app.me;
+      geom = R.drawField($('meCanvas'), me, { grid: true, ghost: true, valign: 'top', frame: '#1f2533' });
+      R.drawNext($('next'), me.next);
+      R.drawSpecials($('queue'), me.inv.slice(1), 17);
+      $('lines').textContent = me.lines;
+      $('level').textContent = me.level;
+      const s = me.inv[0];
+      const chip = $('chip');
+      if (s) {
+        const info = BN.SPECIAL_INFO[s];
+        chip.textContent = s; chip.className = 'chip'; chip.style.color = info.color; chip.style.borderColor = info.color;
+        $('specName').textContent = info.name + (me.inv.length > 1 ? `  +${me.inv.length - 1}` : '');
+        $('specDesc').textContent = info.desc;
+      } else {
+        chip.textContent = '·'; chip.className = 'chip empty'; chip.style.color = ''; chip.style.borderColor = '';
+        $('specName').textContent = 'No special';
+        $('specDesc').textContent = 'Clear lines to earn specials';
+      }
+      for (const o of oppEls) {
+        o.el.classList.toggle('armed', !!s && o.p.alive);
+        R.drawField(o.canvas, o.p, { valign: 'top' });
+      }
+    },
+  });
+
+  app.room.on('special', e => {
+    const info = BN.SPECIAL_INFO[e.special];
+    if (e.target === app.me && e.from !== app.me) toast(`${info.name} from ${e.from.name}`, info.color);
+    else if (e.from === app.me) toast(`${info.name} → ${e.target === app.me ? 'you' : e.target.name}`, info.color);
+  });
+  app.room.on('lines', e => {
+    if (e.from === app.me) toast(`+${e.count} lines sent to all`, '#ffd166');
+    else if (e.targets.includes(app.me)) toast(`+${e.count} from ${e.from.name}`, '#ff7a7a');
+  });
+  app.room.on('death', p => toast(p === app.me ? 'You are out!' : `${p.name} is out`, '#ff5050'));
+
+  // ---------------- gesture pad on the stage
+  const stage = $('stage');
+  let g = null;
+  stage.addEventListener('pointerdown', e => {
+    e.preventDefault();
+    try { stage.setPointerCapture(e.pointerId); } catch (err) { /* ignore */ }
+    g = { id: e.pointerId, x0: e.clientX, y0: e.clientY, ax: e.clientX, ay: e.clientY, t0: performance.now(), moved: false, samples: [[e.clientY, performance.now()]] };
+  });
+  stage.addEventListener('pointermove', e => {
+    if (!g || e.pointerId !== g.id) return;
+    const step = Math.max(14, geom.s * 0.9);
+    let dx = e.clientX - g.ax;
+    while (Math.abs(dx) >= step) {
+      dx > 0 ? app.act.right() : app.act.left();
+      g.ax += dx > 0 ? step : -step;
+      dx = e.clientX - g.ax;
+      g.moved = true;
+    }
+    let dy = e.clientY - g.ay;
+    while (dy >= step) { app.act.soft(); g.ay += step; dy = e.clientY - g.ay; g.moved = true; }
+    if (dy < -step) g.ay = e.clientY - (-step);
+    g.samples.push([e.clientY, performance.now()]);
+    if (g.samples.length > 6) g.samples.shift();
+    if (Math.hypot(e.clientX - g.x0, e.clientY - g.y0) > 10) g.moved = true;
+  });
+  stage.addEventListener('pointerup', e => {
+    if (!g || e.pointerId !== g.id) return;
+    const now = performance.now();
+    const [y1, t1] = g.samples[0];
+    const vy = (e.clientY - y1) / Math.max(1, now - t1);
+    const totalDy = e.clientY - g.y0, totalDx = e.clientX - g.x0;
+    if (!g.moved && now - g.t0 < 300) {
+      const r = stage.getBoundingClientRect();
+      (e.clientX - r.left < r.width / 2) ? app.act.rotateCCW() : app.act.rotate();
+    } else if (vy > 0.9 && totalDy > 40 && Math.abs(totalDy) > Math.abs(totalDx)) {
+      app.act.drop();
+      try { navigator.vibrate && navigator.vibrate(10); } catch (err) { /* ignore */ }
+    }
+    $('help').classList.add('hidden');
+    g = null;
+  });
+  stage.addEventListener('pointercancel', () => { g = null; });
+
+  // ---------------- drag the special chip onto a player
+  const chip = $('chip');
+  let drag = null;
+  function targetAt(x, y) {
+    const el = document.elementFromPoint(x, y);
+    if (!el) return null;
+    const opp = el.closest('.opp');
+    if (opp) return { slot: +opp.dataset.slot, el: opp };
+    if (el.closest('#stage')) return { slot: app.me.slot, el: null };
+    return null;
+  }
+  chip.addEventListener('pointerdown', e => {
+    if (!app.me.inv.length) return;
+    e.preventDefault();
+    try { chip.setPointerCapture(e.pointerId); } catch (err) { /* ignore */ }
+    const ghost = chip.cloneNode(true);
+    ghost.classList.add('ghost-chip');
+    ghost.removeAttribute('id');
+    document.body.appendChild(ghost);
+    chip.classList.add('dragging');
+    drag = { ghost, hover: null };
+    ghost.style.left = e.clientX + 'px'; ghost.style.top = e.clientY + 'px';
+  });
+  chip.addEventListener('pointermove', e => {
+    if (!drag) return;
+    drag.ghost.style.left = e.clientX + 'px'; drag.ghost.style.top = e.clientY + 'px';
+    const t = targetAt(e.clientX, e.clientY);
+    document.querySelectorAll('.opp.drop-hover').forEach(x => x.classList.remove('drop-hover'));
+    if (t && t.el) t.el.classList.add('drop-hover');
+    drag.hover = t;
+  });
+  function endDrag() {
+    if (!drag) return;
+    if (drag.hover) app.act.use(drag.hover.slot);
+    drag.ghost.remove();
+    chip.classList.remove('dragging');
+    document.querySelectorAll('.opp.drop-hover').forEach(x => x.classList.remove('drop-hover'));
+    drag = null;
+  }
+  chip.addEventListener('pointerup', endDrag);
+  chip.addEventListener('pointercancel', () => { if (drag) drag.hover = null; endDrag(); });
+
+  app.bindHold($('useMe'), () => app.act.use(app.me.slot), { repeat: false });
+  app.bindHold($('toss'), app.act.discard, { repeat: false });
+})();
+</script>
+</body>
+</html>
