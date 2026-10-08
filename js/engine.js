@@ -192,7 +192,7 @@
     hardDrop() {
       if (!this.alive || !this.piece) return;
       while (this.tryMove(0, 1));
-      this.lock();
+      this.lock(true);
     }
 
     ghostY() {
@@ -202,7 +202,7 @@
       return y;
     }
 
-    lock() {
+    lock(hard = false) {
       const p = this.piece;
       const color = SHAPES[p.type].color;
       let overflow = false;
@@ -211,12 +211,14 @@
       }
       this.piece = null;
       if (overflow) return this.die();
+      this.room.emit('lock', { player: this, hard });
       this.clearLines();
       if (this.alive) this.spawn();
     }
 
     clearLines() {
       let cleared = 0;
+      const invBefore = this.inv.length;
       for (let y = H - 1; y >= 0; y--) {
         if (this.field[y].every(v => v)) {
           for (const v of this.field[y]) if (isSpecial(v) && this.inv.length < MAX_INV) this.inv.push(v);
@@ -227,6 +229,7 @@
         }
       }
       if (!cleared) return;
+      this.room.emit('clear', { player: this, count: cleared, collected: this.inv.length - invBefore });
       this.lines += cleared;
       const st = this.room.settings;
       this.level = st.startLevel + Math.floor(this.lines / st.linesPerLevel);

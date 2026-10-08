@@ -327,11 +327,29 @@
       }
     });
 
+    // ---------------------------------------------------------- sound effects
+    const sfx = (name, arg) => { if (!demo && BN.sound) BN.sound.play(name, arg); return true; };
+    room.on('start', () => sfx('start'));
+    room.on('lock', e => { if (e.player === app.me) sfx(e.hard ? 'drop' : 'lock'); });
+    room.on('clear', e => {
+      if (e.player !== app.me) return;
+      sfx('clear', Math.min(4, e.count));
+      if (e.collected > 0) setTimeout(() => sfx('collect'), 180);
+    });
+    room.on('special', e => {
+      if (e.from === app.me) sfx('zap');
+      else if (e.target === app.me) sfx(BN.SPECIAL_INFO[e.special].hostile ? 'hit' : 'help');
+    });
+    room.on('lines', e => { if (e.from !== app.me && e.targets.includes(app.me)) sfx('hit'); });
+    room.on('death', p => { if (p === app.me) sfx('dead'); });
+    room.on('end', w => { if (w && w === app.me) setTimeout(() => sfx('win'), 300); });
+    room.on('log', e => { if (e.kind === 'chat' && app.me && !e.text.startsWith(`<${app.me.name}>`)) sfx('chat'); });
+
     const act = {
-      left: () => app.me && app.me.move(-1),
-      right: () => app.me && app.me.move(1),
-      rotate: () => app.me && app.me.rotate(1),
-      soft: () => app.me && app.me.softDrop(),
+      left: () => app.me && app.me.move(-1) && sfx('move'),
+      right: () => app.me && app.me.move(1) && sfx('move'),
+      rotate: () => app.me && app.me.rotate(1) && sfx('rotate'),
+      soft: () => { if (app.me && app.me.piece) { const y = app.me.piece.y; app.me.softDrop(); if (app.me.piece && app.me.piece.y > y) sfx('soft'); } },
       drop: () => app.me && app.me.hardDrop(),
       use: slot => app.me && room.useSpecial(app.me, slot),
       discard: () => app.me && room.discardSpecial(app.me),

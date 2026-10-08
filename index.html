@@ -80,6 +80,7 @@
   <div class="bar">
     <div class="logo">Blocks<span>Net</span></div>
     <div class="stats"><span>LINES <b id="lines">0</b></span><span>LEVEL <b id="level">1</b></span></div>
+    <button class="chat" id="muteBtn" aria-label="Sound on/off">&#128264;</button>
     <button class="chat" id="partyBtn" aria-label="Partyline chat">&#128172;</button>
   </div>
 
@@ -119,6 +120,7 @@
 <script src="js/render.js"></script>
 <script src="js/vendor/peerjs.min.js"></script>
 <script src="js/net.js"></script>
+<script src="js/sound.js"></script>
 <script src="js/app.js"></script>
 <script>
 (function () {
@@ -208,6 +210,9 @@
   app.bindHold($('bRot'), app.act.rotate, { repeat: false });
   app.bindHold($('bDrop'), app.act.drop, { repeat: false });
 
+  const showMute = () => { $('muteBtn').innerHTML = BN.sound.muted ? '&#128263;' : '&#128264;'; $('muteBtn').setAttribute('aria-pressed', BN.sound.muted); };
+  $('muteBtn').addEventListener('click', () => { BN.sound.setMuted(!BN.sound.muted); showMute(); BN.sound.play('rotate'); });
+  showMute();
   $('partyBtn').addEventListener('click', () => { $('party').classList.add('open'); $('partyBtn').classList.remove('unread'); });
   $('partyClose').addEventListener('click', () => $('party').classList.remove('open'));
   $('chatForm').addEventListener('submit', e => { e.preventDefault(); app.act.say($('chatIn').value); $('chatIn').value = ''; });

@@ -23,7 +23,7 @@ On iOS use *Share → Add to Home Screen*, and on Linux phones use *Install / Ad
 
 Portrait, one hand-held layout:
 
-- **Top line:** game name, lines, level, and the partyline chat button (a dot means unread messages).
+- **Top line:** game name, lines, level, a sound on/off button and the partyline chat button (a dot means unread messages).
 - **Your field** on the left, sized to the largest the screen allows. Under it are your specials (the first one is used next) and the attack log.
 - **The 3 opponents** stacked on the right, with the next piece above them. Tap an opponent to fire your special at them.
 - **Buttons:** 1–4 fire your first special at that player and D discards it. Below are ◀ ▼ ▶ to move and soft-drop, ⟳ to rotate (one direction only) and ⤓ to hard-drop.
@@ -39,6 +39,10 @@ lock palette with bevelled blocks.
 - Level and gravity speed-up, junk-filled field when eliminated, attack/defense log, partyline chat, and a winlist stored on the device.
 - Bots use a heuristic placement AI and use specials sensibly (gravity/nuke on themselves when high, switch when losing, and so on).
 
+## Sound
+
+Short retro sound effects are generated in the browser (Web Audio), so there are no audio files and no music. They play when you move, rotate, soft-drop, land or hard-drop a piece, clear lines (1–4 rising notes), collect a special, fire one, get hit by an attack or lines, receive a helpful special, get chat, get eliminated and win. Only your own actions and attacks aimed at you make sound. The 🔈 button in the top line mutes it, and the setting is remembered. On iPhone the silent switch also mutes the game.
+
 ## Fullscreen
 
 - **Android and Linux phone browsers** (Firefox, Chromium, GNOME Web): leave *Play fullscreen* ticked in the lobby. The game goes fullscreen and locks to portrait when you tap Start.
@@ -49,6 +53,7 @@ lock palette with bevelled blocks.
 ```
 js/engine.js   rules: Player, Room (routes lines/specials), BotBrain
 js/render.js   canvas drawing: fields, next piece, special bar
+js/sound.js    synthesised sound effects (Web Audio)
 js/net.js      online rooms: PeerJS / same-browser transports, host relay, room codes, invites
 js/app.js      shared shell: lobby, online room screens, game loop, keyboard, buttons, winlist, haptics
 js/vendor/     PeerJS 1.5.5 (MIT)
