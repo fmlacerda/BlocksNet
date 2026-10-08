@@ -26,11 +26,25 @@
     return ctx;
   }
 
+  // Browsers only let audio start inside a real user gesture. On touch screens that is the
+  // finger lifting (touchend / pointerup / click), not touching down, so listen to all of
+  // them. Safari also needs a sound to actually be played during that gesture, so a silent
+  // one-sample buffer is played each time the context is (re)started.
   function unlock() {
     if (!init()) return;
-    if (ctx.state === 'suspended') ctx.resume().catch(() => {});
+    if (ctx.state !== 'running') {
+      try {
+        const src = ctx.createBufferSource();
+        src.buffer = ctx.createBuffer(1, 1, 22050);
+        src.connect(ctx.destination);
+        src.start(0);
+      } catch (e) { /* ignore */ }
+      if (ctx.resume) ctx.resume().catch(() => {});
+    }
   }
-  ['pointerdown', 'touchstart', 'keydown'].forEach(ev => addEventListener(ev, unlock, { capture: true, passive: true }));
+  ['pointerdown', 'pointerup', 'touchstart', 'touchend', 'mousedown', 'click', 'keydown']
+    .forEach(ev => addEventListener(ev, unlock, { capture: true, passive: true }));
+  // iOS suspends audio when the page goes to the background; the next tap restarts it.
 
   // One oscillator note with a quick attack and exponential decay.
   function tone({ type = 'square', f = 440, f2 = null, t = 0, dur = 0.08, vol = 0.2 }) {
@@ -96,5 +110,5 @@
     try { localStorage.setItem('bn.muted', muted ? '1' : '0'); } catch (e) { /* storage unavailable */ }
   }
 
-  BN.sound = { play, unlock, setMuted, get muted() { return muted; } };
+  BN.sound = { play, unlock, setMuted, get muted() { return muted; }, _ctx: () => ctx };
 })(window.BN);
