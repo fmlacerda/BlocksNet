@@ -32,6 +32,16 @@
     q: { name: 'Blockquake', hostile: true, color: '#ffd84d', desc: 'Shakes every row of the target field sideways.' },
     o: { name: 'Block Bomb', hostile: true, color: '#ff3b3b', desc: 'Every "o" on the target field explodes, scattering blocks.' },
   };
+  // Gravity presets: ms per row at level 1, ms faster per level, fastest allowed.
+  const SPEEDS = {
+    relaxed: { label: 'Relaxed', base: 1400, step: 10, min: 180 },
+    classic: { label: 'Classic', base: 1000, step: 12, min: 90 },
+    fast:    { label: 'Fast',    base: 650,  step: 14, min: 60 },
+    turbo:   { label: 'Turbo',   base: 350,  step: 10, min: 35 },
+    insane:  { label: 'Insane',  base: 120,  step: 4,  min: 16 },
+  };
+  const DEFAULT_SETTINGS = { speed: 'classic', startLevel: 1, linesPerLevel: 2 };
+
   // Special frequencies (percent).
   const SPECIAL_FREQ = { a: 32, c: 18, n: 1, r: 11, s: 3, b: 14, g: 6, q: 6, o: 9 };
 
@@ -108,7 +118,7 @@
       this.inv = [];
       this.alive = true;
       this.lines = 0;
-      this.level = 1;
+      this.level = this.room.settings.startLevel;
       this.piece = null;
       this.next = randomType();
       this.dropTimer = 0;
@@ -118,7 +128,10 @@
 
     get height() { return stackHeight(this.field); }
 
-    get dropInterval() { return Math.max(90, 1000 - (this.level - 1) * 12); }
+    get dropInterval() {
+      const sp = SPEEDS[this.room.settings.speed] || SPEEDS.classic;
+      return Math.max(sp.min, sp.base - (this.level - 1) * sp.step);
+    }
 
     spawn() {
       const type = this.next;
@@ -201,7 +214,8 @@
       }
       if (!cleared) return;
       this.lines += cleared;
-      this.level = 1 + Math.floor(this.lines / 2);
+      const st = this.room.settings;
+      this.level = st.startLevel + Math.floor(this.lines / st.linesPerLevel);
       this.room.onLinesCleared(this, cleared);
       for (let i = 0; i < cleared; i++) this.addSpecialToField();
     }
@@ -336,7 +350,8 @@
       this.specialTimer = 1500 + Math.random() * 3000;
     }
 
-    get actDelay() { return 220 - this.skill * 170; }
+    // Bots never act slower than a third of the fall speed, so fast presets stay playable for them.
+    get actDelay() { return Math.min(220 - this.skill * 170, this.p.dropInterval / 3); }
 
     evaluate(field) {
       let agg = 0, holes = 0, bump = 0, prev = -1;
@@ -423,6 +438,7 @@
     constructor() {
       this.players = [];
       this.bots = [];
+      this.settings = Object.assign({}, DEFAULT_SETTINGS);
       this.listeners = {};
       this.running = false;
       this.paused = false;
@@ -532,7 +548,7 @@
   }
 
   global.BN = Object.assign(global.BN || {}, {
-    W, H, MAX_INV, COLORS, SHAPES, SPECIAL_INFO, SPECIAL_FREQ,
+    W, H, MAX_INV, COLORS, SHAPES, SPECIAL_INFO, SPECIAL_FREQ, SPEEDS, DEFAULT_SETTINGS,
     Room, Player, BotBrain, pieceCells, isSpecial,
   });
 })(window);

@@ -15,6 +15,28 @@
   const SKILLS = { easy: 0.15, normal: 0.5, hard: 0.85 };
   const BOT_CHAT = ['gg', 'nice!', 'who sent the nuke?', 'lol', 'argh lines', 'wp', 'again?', 's on me pls no'];
 
+  const START_LEVELS = [1, 5, 10, 15, 20, 30, 50];
+  const LINES_PER_LEVEL = [1, 2, 3, 5, 10];
+  const DEFAULTS = { name: 'Player', bots: 5, skill: 'normal', speed: 'classic', startLevel: 1, linesPerLevel: 2, fullscreen: true };
+
+  // Fullscreen API: works in Android / Linux phone browsers and on desktop. iPhone Safari has
+  // no page fullscreen; there the page is full screen when launched from "Add to Home Screen".
+  const fsSupported = !!(document.documentElement.requestFullscreen || document.documentElement.webkitRequestFullscreen);
+  const isStandalone = () => (window.matchMedia && matchMedia('(display-mode: standalone)').matches) || navigator.standalone === true;
+  const isIOS = /iP(hone|od|ad)/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+
+  function enterFullscreen(landscape) {
+    const el = document.documentElement;
+    if (document.fullscreenElement || document.webkitFullscreenElement) return;
+    const req = el.requestFullscreen || el.webkitRequestFullscreen;
+    if (!req) return;
+    try {
+      const p = req.call(el, { navigationUI: 'hide' });
+      const lock = () => { if (landscape && screen.orientation && screen.orientation.lock) screen.orientation.lock('landscape').catch(() => {}); };
+      if (p && p.then) p.then(lock).catch(() => {}); else lock();
+    } catch (e) { /* refused, e.g. not triggered by a tap */ }
+  }
+
   let muted = false;
   function haptic(ms) {
     if (muted) return;
@@ -38,7 +60,11 @@
   }
 
   function lobbyHTML(title, subtitle) {
-    const s = store.get('settings', { name: 'Player', bots: 5, skill: 'normal' });
+    const s = Object.assign({}, DEFAULTS, store.get('settings', {}));
+    const opt = (list, cur, label = v => v) => list.map(v => `<option value="${v}" ${v === cur ? 'selected' : ''}>${label(v)}</option>`).join('');
+    const fsRow = fsSupported
+      ? `<label class="bn-check"><input type="checkbox" id="bn-fs" ${s.fullscreen ? 'checked' : ''}> Play fullscreen</label>`
+      : (isIOS && !isStandalone() ? `<p class="bn-hint bn-fs-hint">For full screen on iPhone: Share &rarr; <b>Add to Home Screen</b>, then open BlocksNet from the icon.</p>` : '');
     return `
       <div class="bn-overlay" id="bn-lobby">
         <div class="bn-panel">
@@ -48,8 +74,14 @@
           <label>Nickname<input id="bn-name" maxlength="12" value="${String(s.name).replace(/"/g, '')}" autocomplete="off"></label>
           <div class="bn-row">
             <label>Opponents<select id="bn-bots">${[1, 2, 3, 4, 5].map(n => `<option ${n === s.bots ? 'selected' : ''}>${n}</option>`).join('')}</select></label>
-            <label>Bot skill<select id="bn-skill">${Object.keys(SKILLS).map(k => `<option ${k === s.skill ? 'selected' : ''}>${k}</option>`).join('')}</select></label>
+            <label>Bot skill<select id="bn-skill">${opt(Object.keys(SKILLS), s.skill)}</select></label>
           </div>
+          <div class="bn-row">
+            <label>Speed<select id="bn-speed">${opt(Object.keys(BN.SPEEDS), s.speed, k => BN.SPEEDS[k].label)}</select></label>
+            <label>Start level<select id="bn-level">${opt(START_LEVELS, s.startLevel)}</select></label>
+            <label>Level up<select id="bn-lpl">${opt(LINES_PER_LEVEL, s.linesPerLevel, n => `${n} line${n > 1 ? 's' : ''}`)}</select></label>
+          </div>
+          ${fsRow}
           <button class="bn-btn-primary" id="bn-start">Start game</button>
           <a class="bn-back" href="index.html">&larr; all UI options</a>
         </div>
@@ -78,7 +110,13 @@
       const name = ($('bn-name').value.trim() || 'Player').slice(0, 12);
       const bots = +$('bn-bots').value;
       const skill = $('bn-skill').value;
-      store.set('settings', { name, bots, skill });
+      const speed = $('bn-speed').value;
+      const startLevel = +$('bn-level').value;
+      const linesPerLevel = +$('bn-lpl').value;
+      const fullscreen = $('bn-fs') ? $('bn-fs').checked : DEFAULTS.fullscreen;
+      store.set('settings', { name, bots, skill, speed, startLevel, linesPerLevel, fullscreen });
+      room.settings = demo ? Object.assign({}, BN.DEFAULT_SETTINGS) : { speed, startLevel, linesPerLevel };
+      app.fullscreen = fullscreen;
       room.players = []; room.bots = [];
       app.me = room.addPlayer(name, demo ? { local: true, bot: true, skill: 0.6 } : { local: true });
       const names = BOT_NAMES.slice().sort(() => Math.random() - 0.5);
@@ -90,6 +128,7 @@
     }
 
     function start() {
+      if (app.fullscreen && !demo) enterFullscreen(!!config.landscape);
       $('bn-lobby').classList.add('hidden');
       $('bn-end').classList.add('hidden');
       room.start();

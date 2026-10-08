@@ -37,8 +37,14 @@ Keyboard also works for desktop testing: arrows to move, ↑/X/Z to rotate, Spac
 - Classic line sending: clearing 2 lines sends 1 to every opponent, 3 sends 2, 4 sends 4.
 - Specials appear on your field when you clear lines. Clearing the line that holds one banks it (inventory of up to 18). Default frequencies:
   `a` Add Line · `c` Clear Line · `n` Nuke Field · `r` Random Clear · `s` Switch Fields · `b` Clear Specials · `g` Block Gravity · `q` Blockquake · `o` Block Bomb.
+- Game speed settings in the lobby: **Speed** preset (Relaxed, Classic, Fast, Turbo, Insane), **Start level** (1–50) and **Level up** every 1–10 lines. Bots speed up to keep pace.
 - Level and gravity speed-up, junk-filled field when eliminated, attack/defense log, partyline chat (option A), and a winlist stored on the device.
 - Bots use a heuristic placement AI and use specials sensibly (gravity/nuke on themselves when high, switch when losing, and so on).
+
+## Fullscreen
+
+- **Android and Linux phone browsers** (Firefox, Chromium, GNOME Web): leave *Play fullscreen* ticked in the lobby. The game goes fullscreen when you tap Start, and option C also locks to landscape.
+- **iPhone**: Safari has no fullscreen mode for web pages. Use *Share → Add to Home Screen* and launch BlocksNet from the icon. It then opens without browser bars (the lobby shows this tip on iPhone).
 
 ## Code layout
 

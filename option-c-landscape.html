@@ -134,6 +134,7 @@
 
   const app = BN.app({
     title: 'Option C · Landscape Arcade',
+    landscape: true,
     subtitle: 'Hold the phone sideways like a handheld. D-pad: ◀ ▶ move, ▼ soft drop, ▲ hard drop. A/B rotate. Tap any field to fire your special; ME uses it on yourself.',
     onSetup: build,
     render(app) {
@@ -165,13 +166,6 @@
   app.bindHold($('bB'), app.act.rotateCCW, { repeat: false });
   app.bindHold($('bSelf'), () => app.act.use(app.me.slot), { repeat: false });
   app.bindHold($('bToss'), app.act.discard, { repeat: false });
-
-  // Where supported (Android / Linux browsers), go fullscreen and lock landscape on start.
-  $('bn-start').addEventListener('click', () => {
-    const el = document.documentElement;
-    const p = el.requestFullscreen ? el.requestFullscreen() : null;
-    if (p && p.then) p.then(() => screen.orientation && screen.orientation.lock && screen.orientation.lock('landscape').catch(() => {})).catch(() => {});
-  });
 })();
 </script>
 </body>
