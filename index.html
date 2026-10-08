@@ -11,7 +11,7 @@
 <link rel="icon" href="icon.svg">
 <link rel="apple-touch-icon" href="icon.svg">
 <title>BlocksNet</title>
-<link rel="stylesheet" href="css/common.css?v=20261009a">
+<link rel="stylesheet" href="css/common.css?v=20261009b">
 <style>
   /* Portrait layout for up to 4 players: a slim status line on top so the playfield gets
      the space, your field on the left, the 3 opponents stacked on the right, special bar and
@@ -48,9 +48,15 @@
   .opp .tag em { font-style: normal; color: var(--dim); overflow: hidden; text-overflow: ellipsis; }
   .opp canvas { flex: 1; min-height: 0; }
 
-  .specials .lbl { display: flex; justify-content: space-between; font-size: 10px; line-height: 12px; color: var(--dim); margin-bottom: 2px; }
-  .specials .lbl b { color: var(--accent); }
-  .specials canvas { height: 16px; }
+  /* One blink of a coloured border when an opponent hits you with a special. */
+  .me::after, .opp::after {
+    content: ""; position: absolute; inset: -3px; pointer-events: none; opacity: 0;
+    border: 3px solid var(--hit, #ff4040); border-radius: 6px;
+    box-shadow: 0 0 14px 2px var(--hit, #ff4040), inset 0 0 14px 2px var(--hit, #ff4040);
+  }
+  .opp::after { inset: 12px -2px -2px; border-width: 2px; box-shadow: 0 0 8px 1px var(--hit, #ff4040); }
+  .me.hit::after, .opp.hit::after { animation: hitblink .75s ease-out 1; }
+  @keyframes hitblink { 0% { opacity: 0 } 12% { opacity: 1 } 55% { opacity: 1 } 100% { opacity: 0 } }
 
   /* Action ticker: the last 3 events, newest at the bottom. Lines slide up and fade as
      newer ones arrive, and fade away on their own after a few seconds. Tap for history. */
@@ -107,10 +113,6 @@
   <div class="main">
     <div class="left">
       <div class="me"><canvas id="meCanvas"></canvas></div>
-      <div class="specials">
-        <div class="lbl"><span>Specials</span><b id="specName">—</b></div>
-        <canvas id="spec"></canvas>
-      </div>
       <div class="log" id="log"></div>
     </div>
     <div class="side">
@@ -136,13 +138,13 @@
     <form id="chatForm"><input id="chatIn" placeholder="Say something…" autocomplete="off"><button>Send</button></form>
   </div>
 
-<script src="js/engine.js?v=20261009a"></script>
-<script src="js/render.js?v=20261009a"></script>
-<script src="js/vendor/peerjs.min.js?v=20261009a"></script>
-<script src="js/config.js?v=20261009a"></script>
-<script src="js/net.js?v=20261009a"></script>
-<script src="js/sound.js?v=20261009a"></script>
-<script src="js/app.js?v=20261009a"></script>
+<script src="js/engine.js?v=20261009b"></script>
+<script src="js/render.js?v=20261009b"></script>
+<script src="js/vendor/peerjs.min.js?v=20261009b"></script>
+<script src="js/config.js?v=20261009b"></script>
+<script src="js/net.js?v=20261009b"></script>
+<script src="js/sound.js?v=20261009b"></script>
+<script src="js/app.js?v=20261009b"></script>
 <script>
 (function () {
   const R = BN.render;
@@ -231,10 +233,8 @@
     onSetup: buildOpps,
     render(app) {
       const me = app.me;
-      R.drawField($('meCanvas'), me, { grid: true, frame: '#3a4258', valign: 'top' });
+      R.drawField($('meCanvas'), me, { grid: true, frame: '#3a4258', valign: 'top', inv: me.inv });
       R.drawNext($('next'), me.next);
-      R.drawSpecials($('spec'), me.inv);
-      $('specName').textContent = me.inv[0] ? BN.SPECIAL_INFO[me.inv[0]].name : '—';
       $('lines').textContent = me.lines;
       $('level').textContent = me.level;
       for (const o of oppEls) R.drawField(o.canvas, o.p, { valign: 'top', highlight: me.inv.length && o.p.alive ? 'rgba(255,204,51,.6)' : null });
@@ -246,11 +246,27 @@
   });
   app.room.on('log', addLog);
 
+  // Border blink (once) when a special lands: on your field if an opponent sent it,
+  // on an opponent's mini field when they are the target.
+  function blink(el, color) {
+    if (!el) return;
+    el.style.setProperty('--hit', color);
+    el.classList.remove('hit');
+    void el.offsetWidth;            // restart the animation if it is already running
+    el.classList.add('hit');
+  }
+  app.room.on('special', e => {
+    const color = BN.SPECIAL_INFO[e.special].color;
+    if (e.target === app.me) { if (e.from !== app.me) blink(document.querySelector('.me'), color); }
+    else { const o = oppEls.find(x => x.p === e.target); if (o) blink(o.el, color); }
+  });
+  document.addEventListener('animationend', ev => { if (ev.animationName === 'hitblink') ev.target.classList.remove('hit'); });
+
   // Give your own field as much room as the screen allows: as tall as possible after the
   // special bar and a 2-line log, but leaving at least ~24% of the width for opponents.
   function sizeField(again = true) {
     const main = document.querySelector('.main').getBoundingClientRect();
-    const reserved = document.querySelector('.specials').getBoundingClientRect().height + $('log').getBoundingClientRect().height + 8 + 4;
+    const reserved = $('log').getBoundingClientRect().height + 4 + 4;
     const byHeight = (main.height - reserved) * 12 / 22;
     const w = Math.max(main.width * 0.6, Math.min(main.width * 0.76, byHeight));
     document.querySelector('.left').style.flexBasis = Math.floor(w) + 'px';

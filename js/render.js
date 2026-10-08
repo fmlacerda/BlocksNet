@@ -79,6 +79,10 @@
     for (let y = 0; y < H; y++) for (let x = 0; x < W; x++)
       if (f[y][x]) drawBlock(ctx, ox + x * s, oy + y * s, s, f[y][x], player.alive ? 1 : 0.35);
 
+    // Special inventory drawn inside the top row of the field, semi-transparent so the
+    // blocks underneath stay visible; the falling piece is drawn on top of it.
+    if (opts.inv && opts.inv.length && player.alive) drawInventory(ctx, opts.inv, ox, oy, s, opts.invAlpha ?? 0.6);
+
     const p = player.piece;
     if (p && player.alive) {
       const color = SHAPES[p.type].color;
@@ -121,6 +125,38 @@
       ctx.fillText('OUT', ox + (s * W) / 2, oy + (s * H) / 2);
     }
     return { s, ox, oy };
+  }
+
+  function drawInventory(ctx, inv, ox, oy, s, alpha) {
+    const SHOW = 6;
+    const n = Math.min(inv.length, SHOW);
+    const pad = Math.max(1, Math.round(s * 0.08));
+    const t = s - pad * 2;
+    for (let i = 0; i < n; i++) drawBlock(ctx, ox + i * s + pad, oy + pad, t, inv[i], alpha);
+    // The one that fires next: bright outline.
+    ctx.globalAlpha = Math.min(1, alpha + 0.3);
+    ctx.strokeStyle = '#fff';
+    ctx.lineWidth = Math.max(1.5, s / 12);
+    ctx.strokeRect(ox + pad / 2, oy + pad / 2, s - pad, s - pad);
+    let x = ox + n * s + s * 0.15;
+    ctx.textBaseline = 'middle';
+    ctx.textAlign = 'left';
+    if (inv.length > SHOW) {
+      ctx.font = `700 ${Math.floor(s * 0.5)}px system-ui, sans-serif`;
+      ctx.fillStyle = '#fff';
+      ctx.fillText(`+${inv.length - SHOW}`, x, oy + s / 2);
+      x += s * 1.1;
+    }
+    const info = SPECIAL_INFO[inv[0]];
+    const room = ox + 12 * s - x - s * 0.15;
+    if (room > s * 1.2) {
+      ctx.font = `700 ${Math.floor(s * 0.42)}px system-ui, sans-serif`;
+      ctx.fillStyle = info.color;
+      let name = info.name;
+      while (name.length > 3 && ctx.measureText(name).width > room) name = name.slice(0, -2) + '…';
+      ctx.fillText(name, x, oy + s / 2);
+    }
+    ctx.globalAlpha = 1;
   }
 
   function drawNext(canvas, type) {

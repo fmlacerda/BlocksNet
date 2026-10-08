@@ -639,7 +639,7 @@
   }
 
   global.BN = Object.assign(global.BN || {}, {
-    VERSION: '2026.10.09a',
+    VERSION: '2026.10.09b',
     W, H, MAX_INV, COLORS, SHAPES, SPECIAL_INFO, SPECIAL_FREQ, SPEEDS, DEFAULT_SETTINGS,
     Room, Player, BotBrain, pieceCells, isSpecial, encodeField, decodeField,
   });
