@@ -245,6 +245,7 @@
       show('bn-online', false); show('bn-end', false); show('bn-lobby', true);
       if (message) room.log(message, 'system');
       setup();
+      setTimeout(maybeUpdate, 0);
     }
 
     // Room chat (the partyline before and between games).
@@ -487,6 +488,37 @@
     // Render an idle board behind the lobby so the layout is visible.
     setup();
     if (demo) { muted = true; start(); }
+    // ---------------------------------------------------------- auto-update
+    // Phones (iOS Home Screen apps especially) can keep an old copy of the page. Ask the
+    // server for the current version on launch and whenever the app comes back to the
+    // front; if this copy is older, reload a fresh one (never mid-game or in a room).
+    let pendingUpdate = null;
+    function applyUpdate(v) {
+      let n = 0;
+      try { n = +(sessionStorage.getItem('bn.upd.' + v) || 0); sessionStorage.setItem('bn.upd.' + v, n + 1); } catch (e) { /* ignore */ }
+      if (n >= 2) return;            // don't loop if a stale copy keeps coming back
+      const u = new URL(location.href);
+      u.searchParams.set('v', v);
+      location.replace(u.toString());
+    }
+    function maybeUpdate() {
+      if (demo || !pendingUpdate) return;
+      if (room.running || session) return;   // wait until back in the lobby
+      applyUpdate(pendingUpdate);
+    }
+    async function checkUpdate() {
+      if (demo || location.protocol === 'file:') return;
+      try {
+        const r = await fetch('version.json?t=' + Date.now(), { cache: 'no-store' });
+        if (!r.ok) return;
+        const v = String((await r.json()).version || '');
+        if (v && v !== BN.VERSION) { pendingUpdate = v; maybeUpdate(); }
+      } catch (e) { /* offline: keep playing this copy */ }
+    }
+    checkUpdate();
+    document.addEventListener('visibilitychange', () => { if (!document.hidden) checkUpdate(); });
+    room.on('end', () => setTimeout(maybeUpdate, 4000));
+
     return app;
   }
 

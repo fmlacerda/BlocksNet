@@ -48,6 +48,12 @@ Short retro sound effects are generated in the browser (Web Audio), so there are
 - **Android and Linux phone browsers** (Firefox, Chromium, GNOME Web): leave *Play fullscreen* ticked in the lobby. The game goes fullscreen and locks to portrait when you tap Start.
 - **iPhone**: Safari has no fullscreen mode for web pages. Use *Share → Add to Home Screen* and launch BlocksNet from the icon. It then opens without browser bars (the lobby shows this tip on iPhone).
 
+## Updates
+
+The game checks `version.json` when it opens and whenever it comes back to the front. If the phone is showing an older saved copy, it reloads itself with the new version (only in the lobby, never mid-game or in an online room). When publishing a change, bump the version in both `version.json` and `js/engine.js` (`BN.VERSION`), and the `?v=` tags in `index.html`.
+
+The `stable` branch holds the last known-good version for quick rollback.
+
 ## Code layout
 
 ```
