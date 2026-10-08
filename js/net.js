@@ -2,14 +2,22 @@
  * Online play, "host is the referee" style.
  *
  * One phone hosts a room and gets a short room code. Other phones join with the
- * code (or an invite link); up to 4 players per room. Guests connect only to the host, which relays game
- * messages between them and runs the bots. Each phone simulates its own field;
- * see Room in engine.js for which messages are exchanged.
+ * code (or an invite link); up to 4 players per room. Guests connect only to the host,
+ * which relays game messages between them and runs the bots. Each phone simulates its
+ * own field; see Room in engine.js for which messages are exchanged.
+ *
+ * Robustness:
+ *  - Heartbeat: both sides ping every 4 s; a link silent for 15 s is treated as dead.
+ *    A device that was itself paused (app in background) does not judge others by it.
+ *  - A guest whose link drops stays in the room and reconnects for up to 45 s; the host
+ *    recognises the returning guest by a per-tab client id.
+ *  - Every step is written to a small log (BN.net.diag()) shown under "Connection details".
  *
  * Transports:
  *  - PeerTransport: WebRTC data channels via PeerJS (js/vendor/peerjs.min.js).
  *    Uses the free PeerJS cloud server to introduce phones to each other, unless
  *    ?peerhost=…&peerport=…&peersecure=0|1&peerpath=… points at your own PeerServer.
+ *    Extra TURN relays can be added in js/config.js (BN_CONFIG.turn).
  *  - LocalTransport (?net=local): BroadcastChannel between tabs of one browser,
  *    for testing on a single computer.
  */
@@ -20,12 +28,16 @@
   const MAX_PLAYERS = 4;
   const CODE_CHARS = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
   const ID_PREFIX = 'blocksnet-v1-';
+  const PING_MS = 4000;
+  const DEAD_MS = 15000;
+  const RECONNECT_FOR_MS = 45000;
 
   const newCode = () => Array.from({ length: 5 }, () => CODE_CHARS[Math.floor(Math.random() * CODE_CHARS.length)]).join('');
   const cleanCode = c => String(c || '').toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 5);
   // Names travel between phones and end up in the page, so keep them to safe characters.
   const cleanName = n => (String(n || '').replace(/[^\p{L}\p{N} _.\-]/gu, '').trim().slice(0, 12)) || 'Player';
   const cleanText = t => String(t || '').slice(0, 200);
+  const rid = () => Math.random().toString(36).slice(2, 10);
 
   const params = new URLSearchParams(location.search);
   const JOIN_TIMEOUT = 20000;
@@ -33,26 +45,78 @@
     "on the room screen (not switched to another app), then tap Join again. If it keeps failing, put both " +
     'phones on the same Wi-Fi: some mobile networks block direct phone-to-phone connections.';
 
+  // ------------------------------------------------------------ diagnostics
+  const DIAG = [];
+  const T0 = Date.now();
+  function note(text) {
+    const t = ((Date.now() - T0) / 1000).toFixed(1).padStart(6);
+    DIAG.push(`${t}s  ${text}`);
+    if (DIAG.length > 400) DIAG.shift();
+  }
+  note(`BlocksNet ${BN.VERSION || '?'} · ${navigator.userAgent}`);
+
+  // Log what the browser's WebRTC layer is doing for one data connection.
+  function watchConnection(conn, who) {
+    const pc = conn && conn.peerConnection;
+    if (!pc || pc.__bnWatched) return;
+    pc.__bnWatched = true;
+    const types = {};
+    pc.addEventListener('icecandidate', e => {
+      if (e.candidate && e.candidate.candidate) {
+        const m = e.candidate.candidate.match(/ typ (\w+)/);
+        const k = (m ? m[1] : '?') + (/ tcp /i.test(e.candidate.candidate) ? '/tcp' : '');
+        types[k] = (types[k] || 0) + 1;
+      } else note(`${who}: own network addresses found: ${JSON.stringify(types)} (host=local, srflx=public, relay=TURN)`);
+    });
+    pc.addEventListener('iceconnectionstatechange', () => note(`${who}: ICE ${pc.iceConnectionState}`));
+    pc.addEventListener('connectionstatechange', () => {
+      note(`${who}: link ${pc.connectionState}`);
+      if (pc.connectionState === 'connected') notePath(pc, who);
+    });
+  }
+  async function notePath(pc, who) {
+    try {
+      const stats = await pc.getStats();
+      let pair = null;
+      stats.forEach(r => { if (r.type === 'candidate-pair' && (r.nominated || r.selected) && r.state === 'succeeded') pair = r; });
+      if (!pair) return;
+      const l = stats.get(pair.localCandidateId), r = stats.get(pair.remoteCandidateId);
+      note(`${who}: connected via ${l ? l.candidateType : '?'}/${l ? (l.protocol || '') : ''} ↔ ${r ? r.candidateType : '?'} (relay = through a TURN server)`);
+    } catch (e) { /* stats not available */ }
+  }
+
   // ------------------------------------------------------------ transports
   // A connection is { id, send(msg), onMessage(fn), onClose(fn), close() }.
 
-  function wrapPeerConn(conn) {
+  function wrapPeerConn(conn, who) {
     const closeFns = [];
     let closed = false;
-    const fire = () => { if (!closed) { closed = true; closeFns.forEach(f => f()); } };
-    conn.on('close', fire);
-    conn.on('error', fire);
+    const fire = why => { if (!closed) { closed = true; note(`${who}: data channel with ${conn.peer.slice(0, 18)} closed (${why})`); closeFns.forEach(f => f()); } };
+    conn.on('close', () => fire('closed'));
+    conn.on('error', e => fire('error ' + (e && (e.type || e.message))));
     return {
       id: conn.peer,
       send: m => { try { if (conn.open) conn.send(m); } catch (e) { /* channel closing */ } },
       onMessage: fn => conn.on('data', fn),
       onClose: fn => closeFns.push(fn),
-      close: () => { try { conn.close(); } catch (e) { /* ignore */ } fire(); },
+      close: () => { try { conn.close(); } catch (e) { /* ignore */ } fire('closed by this device'); },
     };
   }
 
+  // STUN servers let each phone learn its public address; TURN relays carry the data when
+  // the phones cannot reach each other directly. PeerJS's own servers are kept, plus extras.
+  function iceServers() {
+    const list = [
+      { urls: ['stun:stun.l.google.com:19302', 'stun:stun1.l.google.com:19302'] },
+      { urls: 'stun:stun.cloudflare.com:3478' },
+      { urls: ['turn:eu-0.turn.peerjs.com:3478', 'turn:us-0.turn.peerjs.com:3478'], username: 'peerjs', credential: 'peerjsp' },
+    ];
+    const extra = (window.BN_CONFIG && window.BN_CONFIG.turn) || [];
+    return list.concat(extra);
+  }
+
   function peerOptions() {
-    const o = { debug: 0 };
+    const o = { debug: 0, config: { iceServers: iceServers(), sdpSemantics: 'unified-plan' } };
     if (params.get('peerhost')) {
       o.host = params.get('peerhost');
       o.port = +(params.get('peerport') || 443);
@@ -68,48 +132,95 @@
       'network': 'Could not reach the connection server. Check your internet connection.',
       'server-error': 'The connection server is not responding. Try again in a moment.',
       'socket-error': 'Lost contact with the connection server.',
+      'socket-closed': 'Lost contact with the connection server.',
       'browser-incompatible': 'This browser does not support online play (WebRTC).',
-      'webrtc': 'The phones could not connect directly. Try another network (e.g. Wi-Fi instead of mobile data).',
+      'webrtc': NO_DIRECT,
     };
     return map[err && err.type] || ('Connection problem: ' + (err && (err.type || err.message) || 'unknown'));
+  }
+
+  // One PeerJS client per page for joining, reused between attempts: Safari with iCloud
+  // Private Relay may stall a second WebSocket to the same server (WebKit bug 302561).
+  let guestPeer = null;
+  function getGuestPeer() {
+    if (guestPeer && !guestPeer.destroyed) {
+      if (guestPeer.disconnected) { note('guest: reconnecting to the connection server'); try { guestPeer.reconnect(); } catch (e) { /* ignore */ } }
+      return guestPeer;
+    }
+    note('guest: contacting the connection server' + (params.get('peerhost') ? ` ${params.get('peerhost')}` : ' (PeerJS cloud)'));
+    guestPeer = new window.Peer(peerOptions());
+    guestPeer.on('open', id => note(`guest: connection server OK (id ${id.slice(0, 8)}…)`));
+    guestPeer.on('disconnected', () => {
+      note('guest: connection server dropped; reconnecting');
+      setTimeout(() => { try { if (guestPeer && !guestPeer.destroyed && guestPeer.disconnected) guestPeer.reconnect(); } catch (e) { /* ignore */ } }, 1000);
+    });
+    guestPeer.on('error', e => note(`guest: error ${e.type}${e.message ? ' – ' + String(e.message).slice(0, 120) : ''}`));
+    return guestPeer;
   }
 
   const PeerTransport = {
     name: 'peerjs',
     host(code, { onConnection, onReady, onError }) {
       if (!window.Peer) { onError('Online library failed to load.'); return () => {}; }
+      note(`host: opening room ${code}` + (params.get('peerhost') ? ` on ${params.get('peerhost')}` : ' on PeerJS cloud'));
       const peer = new window.Peer(ID_PREFIX + code.toLowerCase(), peerOptions());
-      peer.on('open', () => onReady(code));
-      peer.on('connection', conn => conn.on('open', () => onConnection(wrapPeerConn(conn))));
-      peer.on('error', err => onError(peerErrorText(err), err.type));
+      peer.on('open', () => { note('host: room registered on the connection server'); onReady(code); });
+      peer.on('connection', conn => {
+        note(`host: a guest is connecting (${conn.peer.slice(0, 8)}…)`);
+        watchConnection(conn, 'host');
+        conn.on('open', () => { note(`host: guest ${conn.peer.slice(0, 8)}… connected`); onConnection(wrapPeerConn(conn, 'host')); });
+      });
+      peer.on('error', err => { note(`host: error ${err.type}${err.message ? ' – ' + String(err.message).slice(0, 120) : ''}`); onError(peerErrorText(err), err.type); });
       // The signalling socket may drop while the game keeps running; reconnect quietly.
-      peer.on('disconnected', () => { try { if (!peer.destroyed) peer.reconnect(); } catch (e) { /* ignore */ } });
+      peer.on('disconnected', () => {
+        note('host: connection server dropped; reconnecting');
+        setTimeout(() => { try { if (!peer.destroyed && peer.disconnected) peer.reconnect(); } catch (e) { /* ignore */ } }, 1000);
+      });
       return () => { try { peer.destroy(); } catch (e) { /* ignore */ } };
     },
-    join(code, { onOpen, onError, onStage }) {
+    join(code, { onOpen, onError, onStage, timeout = JOIN_TIMEOUT }) {
       if (!window.Peer) { onError('Online library failed to load.'); return () => {}; }
-      const peer = new window.Peer(peerOptions());
-      let opened = false, failed = false;
+      const peer = getGuestPeer();
+      let opened = false, failed = false, conn = null;
       const fail = (text, type) => {
         if (opened || failed) return;
         failed = true;
         clearTimeout(timer);
+        note(`guest: join attempt failed (${type})`);
+        if (conn) { try { conn.close(); } catch (e) { /* ignore */ } }
         onError(text, type);
       };
       // Without this, a connection that can never be made (e.g. strict mobile networks and no
       // working relay) would leave the guest on "Connecting…" forever.
-      const timer = setTimeout(() => fail(NO_DIRECT, 'timeout'), JOIN_TIMEOUT);
-      onStage && onStage('Reaching the connection server…');
-      peer.on('open', () => {
+      const timer = setTimeout(() => fail(NO_DIRECT, 'timeout'), timeout);
+      const go = () => {
+        if (failed) return;
         onStage && onStage(`Contacting the host's phone (room ${code})…`);
-        const conn = peer.connect(ID_PREFIX + code.toLowerCase(), { reliable: true });
-        conn.on('open', () => { if (failed) return; opened = true; clearTimeout(timer); onOpen(wrapPeerConn(conn)); });
-        conn.on('error', () => fail(NO_DIRECT, 'webrtc'));
-        conn.on('close', () => fail(NO_DIRECT, 'webrtc'));
-      });
-      peer.on('error', err => { if (!opened || err.type !== 'peer-unavailable') fail(peerErrorText(err), err.type); });
-      peer.on('disconnected', () => { try { if (!peer.destroyed) peer.reconnect(); } catch (e) { /* ignore */ } });
-      return () => { try { peer.destroy(); } catch (e) { /* ignore */ } };
+        note(`guest: asking the host of room ${code} to connect`);
+        conn = peer.connect(ID_PREFIX + code.toLowerCase(), { reliable: true });
+        watchConnection(conn, 'guest');
+        conn.on('open', () => {
+          if (failed) return;
+          opened = true; clearTimeout(timer);
+          note('guest: connected to the host');
+          onOpen(wrapPeerConn(conn, 'guest'));
+        });
+        conn.on('error', e => fail(NO_DIRECT, 'webrtc ' + (e && e.type)));
+        conn.on('close', () => fail(NO_DIRECT, 'webrtc closed'));
+      };
+      const onPeerError = err => {
+        if (opened) return;
+        if (['peer-unavailable', 'network', 'server-error', 'socket-error', 'socket-closed', 'browser-incompatible', 'webrtc'].includes(err.type)) fail(peerErrorText(err), err.type);
+      };
+      peer.on('error', onPeerError);
+      if (peer.open) go();
+      else { onStage && onStage('Reaching the connection server…'); peer.once('open', go); }
+      return () => {
+        clearTimeout(timer);
+        peer.removeListener('error', onPeerError);
+        peer.removeListener('open', go);
+        if (conn && !opened) { try { conn.close(); } catch (e) { /* ignore */ } }
+      };
     },
   };
 
@@ -163,28 +274,58 @@
     },
   };
 
+
   const transport = params.get('net') === 'local' ? LocalTransport : PeerTransport;
 
   // ------------------------------------------------------------ session
   /*
    * Session events (on): 'lobby' {players, code}, 'start' {players, settings, me},
-   * 'game' (engine message), 'chat' {name, text}, 'status' text, 'error' text, 'closed' text.
+   * 'game' (engine message), 'chat' {name, text}, 'status' text, 'error' text, 'closed' text,
+   * 'ready' code (host), 'reconnecting' / 'reconnected' (guest).
    */
   class Session {
     constructor() {
       this.listeners = {};
       this.isHost = false;
       this.code = '';
-      this.guests = new Map();   // host only: connId -> { conn, name }
+      this.guests = new Map();   // host only: connId -> { conn, name, cid, rx }
       this.conn = null;          // guest only: connection to host
       this.myId = 'host';
       this.inGame = new Map();   // slot -> owner id, for the current game
       this.teardown = null;
       this.closed = false;
+      this.reconnecting = null;
+      try { this.cid = sessionStorage.getItem('bn.cid') || rid(); sessionStorage.setItem('bn.cid', this.cid); }
+      catch (e) { this.cid = rid(); }
     }
 
     on(ev, fn) { (this.listeners[ev] = this.listeners[ev] || []).push(fn); return this; }
     emit(ev, d) { (this.listeners[ev] || []).forEach(fn => fn(d)); }
+
+    // ---- heartbeat (both sides)
+    startHeartbeat() {
+      if (this.hb) return;
+      let last = Date.now();
+      this.hb = setInterval(() => {
+        const now = Date.now();
+        const gap = now - last;
+        last = now;
+        // Timers stop while the app is in the background; don't blame the others for our pause.
+        const paused = gap > PING_MS * 2.5;
+        if (paused) note(`this device was paused for about ${Math.round(gap / 1000)}s (app in background?)`);
+        if (this.isHost) {
+          for (const [id, g] of this.guests) {
+            if (paused) g.rx = now;
+            g.conn.send({ t: 'ping' });
+            if (now - g.rx > DEAD_MS) { note(`host: no messages from ${g.name} for ${DEAD_MS / 1000}s – dropping`); g.conn.close(); }
+          }
+        } else if (this.conn) {
+          if (paused) this.rx = now;
+          this.conn.send({ t: 'ping' });
+          if (now - this.rx > DEAD_MS) { note(`guest: no messages from the host for ${DEAD_MS / 1000}s`); this.conn.close(); }
+        }
+      }, PING_MS);
+    }
 
     // ---- host
     host(name, attempt = 0) {
@@ -197,15 +338,17 @@
         onReady: code => {
           if (this.ready) { this.emit('status', ''); return; }   // signalling reconnected
           this.ready = true;
+          this.startHeartbeat();
           this.emit('status', ''); this.broadcastLobby(); this.emit('ready', code);
         },
         onConnection: conn => this.acceptGuest(conn),
         onError: (text, type) => {
           if (type === 'unavailable-id' && !this.ready && attempt < 3) { this.teardown && this.teardown(); this.host(name, attempt + 1); return; }
-          if (this.ready && ['network', 'socket-error', 'server-error', 'disconnected', 'unavailable-id'].includes(type)) {
-            // Room already open: the connection server dropped (e.g. app was in the background).
-            // Players already in the room stay connected; PeerJS reconnects in the background.
-            this.emit('status', 'Reconnecting to the connection server… new players may not be able to join for a moment.');
+          if (this.ready) {
+            // Room already open: the connection server dropped (e.g. app was in the background),
+            // or one guest's connection failed. Players already in the room stay connected.
+            if (['network', 'socket-error', 'socket-closed', 'server-error', 'disconnected', 'unavailable-id'].includes(type))
+              this.emit('status', 'Reconnecting to the connection server… new players may not be able to join for a moment.');
             return;
           }
           this.emit('error', text);
@@ -221,13 +364,23 @@
     fromGuest(conn, m) {
       if (!m || typeof m !== 'object') return;
       const g = this.guests.get(conn.id);
+      if (g) g.rx = Date.now();
+      if (m.t === 'ping') return;
       if (m.t === 'hello') {
         if (m.v !== PROTO) { conn.send({ t: 'reject', reason: 'This room runs a different version of BlocksNet. Reload the page on both phones.' }); return; }
+        const cid = String(m.cid || conn.id).slice(0, 20);
+        // A guest coming back after a dropped connection replaces its old, dead entry.
+        let back = false;
+        for (const [id, old] of this.guests) {
+          if (old.cid === cid && id !== conn.id) { back = true; this.guestLeft(old.conn, true); old.conn.close(); }
+        }
         if (this.guests.size >= MAX_PLAYERS - 1) { conn.send({ t: 'reject', reason: `The room is full (${MAX_PLAYERS} players).` }); return; }
-        this.guests.set(conn.id, { conn, name: cleanName(m.name) });
+        const name = cleanName(m.name);
+        this.guests.set(conn.id, { conn, name, cid, rx: Date.now() });
+        note(`host: ${name} ${back ? 'rejoined' : 'joined'} (version ${String(m.ver || '?').slice(0, 20)})`);
         conn.send({ t: 'welcome', id: conn.id, code: this.code });
         this.broadcastLobby();
-        const joined = { t: 'chat', system: true, text: `${cleanName(m.name)} joined the room` };
+        const joined = { t: 'chat', system: true, text: `${name} ${back ? 'is back in' : 'joined'} the room` };
         this.emit('chat', joined);
         this.toGuests(joined);
         return;
@@ -247,12 +400,15 @@
       this.toGuests(m, conn.id);
     }
 
-    guestLeft(conn) {
+    guestLeft(conn, quiet = false) {
       const g = this.guests.get(conn.id);
       if (!g) return;
       this.guests.delete(conn.id);
-      this.emit('chat', { system: true, text: `${g.name} left the room` });
-      this.toGuests({ t: 'chat', system: true, text: `${g.name} left the room` });
+      note(`host: ${g.name} ${quiet ? 'reconnected on a new link' : 'left'}`);
+      if (!quiet) {
+        this.emit('chat', { system: true, text: `${g.name} left the room` });
+        this.toGuests({ t: 'chat', system: true, text: `${g.name} left the room` });
+      }
       for (const [slot, owner] of this.inGame) {
         if (owner === conn.id) {
           const m = { t: 'dead', slot };
@@ -287,6 +443,7 @@
       for (let i = 0; i < botCount && players.length < MAX_PLAYERS; i++)
         players.push({ slot: players.length + 1, name: names[i], owner: 'host', bot: true, skill: botSkill });
       this.inGame = new Map(players.map(p => [p.slot, p.owner]));
+      note(`host: game started with ${players.length} players`);
       const msg = { t: 'start', players, settings };
       this.toGuests(msg);
       this.emit('start', Object.assign({}, msg, { me: 'host' }));
@@ -298,26 +455,77 @@
       this.code = cleanCode(code);
       this.name = cleanName(name);
       if (this.code.length !== 5) { this.emit('error', 'Room codes have 5 letters or digits.'); return; }
+      note(`guest: joining room ${this.code} as ${this.name}`);
       this.emit('status', 'Connecting to room ' + this.code + '…');
+      this.attempt();
+    }
+
+    attempt() {
+      if (this.closed) return;
+      if (this.teardown) this.teardown();
       this.teardown = transport.join(this.code, {
+        timeout: this.reconnecting ? 12000 : JOIN_TIMEOUT,
         onOpen: conn => {
+          if (this.closed) { conn.close(); return; }
           this.conn = conn;
-          conn.onMessage(m => this.fromHost(m));
-          conn.onClose(() => { if (!this.closed) { this.close(); this.emit('closed', 'Lost connection to the host.'); } });
-          conn.send({ t: 'hello', v: PROTO, name: this.name });
+          this.rx = Date.now();
+          conn.onMessage(m => { this.rx = Date.now(); this.fromHost(m); });
+          conn.onClose(() => this.lost(conn));
+          conn.send({ t: 'hello', v: PROTO, name: this.name, cid: this.cid, ver: BN.VERSION });
+          this.startHeartbeat();
         },
-        onError: text => this.emit('error', text),
-        onStage: text => this.emit('status', text),
+        onError: (text, type) => {
+          if (this.reconnecting) { this.retryLater(); return; }
+          this.emit('error', text);
+        },
+        onStage: text => { if (!this.reconnecting) this.emit('status', text); },
       });
+    }
+
+    // The link to the host died: stay in the room and try to get back in.
+    lost(conn) {
+      if (this.closed || conn !== this.conn) return;
+      this.conn = null;
+      if (this.hostLeft) { this.close(); this.emit('closed', 'The host closed the room.'); return; }
+      if (!this.welcomed) { this.close(); this.emit('closed', 'Lost connection to the host.'); return; }
+      if (!this.reconnecting) {
+        this.reconnecting = { until: Date.now() + RECONNECT_FOR_MS, tries: 0 };
+        note('guest: lost the host; reconnecting');
+        this.emit('reconnecting');
+      }
+      this.retryLater();
+    }
+
+    retryLater() {
+      if (this.closed) return;
+      const r = this.reconnecting;
+      if (Date.now() > r.until) {
+        note('guest: could not reconnect; giving up');
+        this.close();
+        this.emit('closed', "Lost connection to the host and couldn't reconnect. Check that the host still has BlocksNet open.");
+        return;
+      }
+      r.tries++;
+      this.emit('status', `Connection to the host lost – reconnecting (try ${r.tries})…`);
+      clearTimeout(this.retryT);
+      this.retryT = setTimeout(() => this.attempt(), r.tries === 1 ? 500 : 2500);
     }
 
     fromHost(m) {
       if (!m || typeof m !== 'object') return;
       switch (m.t) {
-        case 'welcome': this.myId = m.id; this.emit('status', ''); break;
-        case 'reject': this.emit('error', m.reason); this.close(); break;
+        case 'ping': break;
+        case 'welcome':
+          this.myId = m.id;
+          this.welcomed = true;
+          this.emit('status', '');
+          if (this.reconnecting) { this.reconnecting = null; note('guest: back in the room'); this.emit('reconnected'); }
+          break;
+        case 'bye': this.hostLeft = true; break;
+        case 'reject': note(`guest: rejected – ${m.reason}`); this.emit('error', m.reason); this.close(); break;
         case 'lobby': this.emit('lobby', { code: m.code, players: (m.players || []).map(p => ({ name: cleanName(p.name), host: !!p.host })) }); break;
         case 'start':
+          note('guest: game started by the host');
           this.emit('start', {
             players: (m.players || []).map(p => ({ slot: p.slot | 0, name: cleanName(p.name), owner: String(p.owner), bot: !!p.bot })),
             settings: m.settings, me: this.myId,
@@ -352,8 +560,17 @@
     }
 
     close() {
+      if (this.closed) return;
       this.closed = true;
-      if (this.isHost) for (const g of this.guests.values()) g.conn.close();
+      clearInterval(this.hb);
+      clearTimeout(this.retryT);
+      note(`${this.isHost ? 'host' : 'guest'}: left the room`);
+      if (this.isHost) {
+        // Tell guests the room is closing (so they don't try to reconnect), then hang up.
+        const conns = [...this.guests.values()].map(g => g.conn);
+        conns.forEach(c => c.send({ t: 'bye' }));
+        setTimeout(() => conns.forEach(c => c.close()), 300);
+      }
       if (this.conn) this.conn.close();
       this.guests.clear();
       if (this.teardown) this.teardown();
@@ -361,5 +578,5 @@
     }
   }
 
-  BN.net = { Session, transport: transport.name, cleanCode, cleanName, PROTO };
+  BN.net = { Session, transport: transport.name, cleanCode, cleanName, PROTO, diag: () => DIAG.join('\n'), note };
 })(window.BN);

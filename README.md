@@ -56,6 +56,7 @@ js/render.js   canvas drawing: fields, next piece, special bar
 js/sound.js    synthesised sound effects (Web Audio)
 js/net.js      online rooms: PeerJS / same-browser transports, host relay, room codes, invites
 js/app.js      shared shell: lobby, online room screens, game loop, keyboard, buttons, winlist, haptics
+js/config.js   optional extra TURN relays for online play
 js/vendor/     PeerJS 1.5.5 (MIT)
 css/common.css shared tokens, overlays, log colours
 index.html     the game page: layout and button wiring
@@ -74,6 +75,10 @@ Up to 4 players on their own phones, with bots filling any empty slots.
 - **Each phone runs its own field.** The phone sends its field about 10 times a second, plus every line attack, special and chat message.
 - **The host relays.** Guests connect only to the host, which relays messages between them, runs the bots and decides when the game ends.
 - **Guests are checked.** The host only accepts messages a guest sends for its own player, and player names are stripped of anything but letters, digits and simple punctuation.
+
+**If the connection drops:** a guest stays in the Partyline and reconnects automatically for up to 45 seconds; a game in progress continues without them and they play the next one. Both sides send a small heartbeat every 4 seconds, so a dead link is noticed within about 15 seconds. When the host leaves, guests see "The host closed the room".
+
+**Troubleshooting:** the lobby shows the game version (e.g. `v2026.10.09a`) and a **connection details** link; the Partyline has a **Connection details** button too. It shows each step (connection server, network addresses found, how the phones connected, drops and reconnects), with a Copy button. To add your own TURN relay for players on mobile data, edit `js/config.js`.
 
 **Things to know:**
 - The room lives on the host's phone. If the host closes the page or locks the phone, the game ends for everyone.

@@ -92,6 +92,7 @@
             <button class="bn-btn-secondary" id="bn-host">Host a room</button>
             <button class="bn-btn-secondary" id="bn-join-open">Join a room</button>
           </div>` : ''}
+          <p class="bn-version">v${BN.VERSION}${BN.net ? ' · <button class="bn-linkbtn" id="bn-diag-open" type="button">connection details</button>' : ''}</p>
         </div>
       </div>
       <div class="bn-overlay hidden" id="bn-online">
@@ -121,7 +122,21 @@
             <p class="bn-hint" id="bn-wait">Waiting for the host to start the game…</p>
           </div>
           <p class="bn-status" id="bn-on-status"></p>
-          <button class="bn-btn-ghost" id="bn-leave">Leave room</button>
+          <div class="bn-row bn-room-foot">
+            <button class="bn-btn-ghost" id="bn-leave" type="button">Leave room</button>
+            <button class="bn-btn-ghost" id="bn-diag-open2" type="button">Connection details</button>
+          </div>
+        </div>
+      </div>
+      <div class="bn-overlay hidden" id="bn-diag-sheet">
+        <div class="bn-panel bn-panel-room">
+          <div class="bn-sub">Connection details</div>
+          <p class="bn-hint">If online play fails, tap Copy and send this to whoever is helping you.</p>
+          <pre class="bn-diag" id="bn-diag"></pre>
+          <div class="bn-row">
+            <button class="bn-btn-secondary" id="bn-diag-copy" type="button">Copy</button>
+            <button class="bn-btn-primary" id="bn-diag-close" type="button">Close</button>
+          </div>
         </div>
       </div>
       <div class="bn-overlay hidden" id="bn-end">
@@ -198,6 +213,7 @@
 
     // ---------------------------------------------------------- online play
     let session = null;
+    app.session = () => session;   // for debugging and tests
     const show = (id, on) => $(id).classList.toggle('hidden', !on);
     const status = (text, isError) => { $('bn-on-status').textContent = text || ''; $('bn-on-status').classList.toggle('error', !!isError); };
 
@@ -279,6 +295,14 @@
         start();
       });
       s.on('game', m => room.receive(m));
+      s.on('reconnecting', () => {
+        if (session !== s) return;
+        if (room.running) { room.running = false; room.log('*** Connection lost – you are out of this game ***', 'death'); }
+        show('bn-end', false);
+        openOnline('guest');
+        roomChat('Connection to the host was lost – reconnecting…', 'death');
+      });
+      s.on('reconnected', () => { if (session === s) roomChat('Reconnected. Waiting for the host to start the next game…', 'system'); });
       s.on('chat', c => {
         const text = c.system ? c.text : `<${c.name}> ${c.text}`;
         room.log(text, c.system ? 'system' : 'chat');
@@ -322,6 +346,24 @@
         $('bn-chat-in').value = '';
       });
       $('bn-leave').addEventListener('click', () => leaveOnline());
+      const openDiag = () => {
+        $('bn-diag').textContent = BN.net.diag() + `\n\nscreen ${innerWidth}x${innerHeight} · online=${navigator.onLine} · ${new Date().toISOString()}`;
+        show('bn-diag-sheet', true);
+        const pre = $('bn-diag'); pre.scrollTop = pre.scrollHeight;
+      };
+      $('bn-diag-open').addEventListener('click', openDiag);
+      $('bn-diag-open2').addEventListener('click', openDiag);
+      $('bn-diag-close').addEventListener('click', () => show('bn-diag-sheet', false));
+      $('bn-diag-copy').addEventListener('click', async () => {
+        const text = $('bn-diag').textContent;
+        try { await navigator.clipboard.writeText(text); $('bn-diag-copy').textContent = 'Copied ✓'; }
+        catch (e) {
+          const r = document.createRange(); r.selectNodeContents($('bn-diag'));
+          const sel = getSelection(); sel.removeAllRanges(); sel.addRange(r);
+          $('bn-diag-copy').textContent = 'Selected – use Copy';
+        }
+        setTimeout(() => { $('bn-diag-copy').textContent = 'Copy'; }, 2500);
+      });
       $('bn-share').addEventListener('click', async () => {
         if (!session) return;
         const url = session.inviteLink();
