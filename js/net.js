@@ -2,7 +2,7 @@
  * Online play, "host is the referee" style.
  *
  * One phone hosts a room and gets a short room code. Other phones join with the
- * code (or an invite link). Guests connect only to the host, which relays game
+ * code (or an invite link); up to 4 players per room. Guests connect only to the host, which relays game
  * messages between them and runs the bots. Each phone simulates its own field;
  * see Room in engine.js for which messages are exchanged.
  *
@@ -17,7 +17,7 @@
   'use strict';
 
   const PROTO = 1;
-  const MAX_PLAYERS = 6;
+  const MAX_PLAYERS = 4;
   const CODE_CHARS = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
   const ID_PREFIX = 'blocksnet-v1-';
 
@@ -195,7 +195,7 @@
       const g = this.guests.get(conn.id);
       if (m.t === 'hello') {
         if (m.v !== PROTO) { conn.send({ t: 'reject', reason: 'This room runs a different version of BlocksNet. Reload the page on both phones.' }); return; }
-        if (this.guests.size >= MAX_PLAYERS - 1) { conn.send({ t: 'reject', reason: 'The room is full (6 players).' }); return; }
+        if (this.guests.size >= MAX_PLAYERS - 1) { conn.send({ t: 'reject', reason: `The room is full (${MAX_PLAYERS} players).` }); return; }
         this.guests.set(conn.id, { conn, name: cleanName(m.name) });
         conn.send({ t: 'welcome', id: conn.id, code: this.code });
         this.broadcastLobby();

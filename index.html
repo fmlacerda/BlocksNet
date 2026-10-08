@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <meta name="theme-color" content="#0b0d12">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
@@ -13,112 +13,205 @@
 <title>BlocksNet</title>
 <link rel="stylesheet" href="css/common.css">
 <style>
-  html, body { overflow: auto; height: auto; -webkit-user-select: auto; user-select: auto; }
-  body { padding: calc(20px + var(--safe-t)) 16px calc(32px + var(--safe-b)); background: #0b0d12 radial-gradient(100% 40% at 50% 0%, #17203a, transparent); }
-  .wrap { max-width: 1120px; margin: 0 auto; }
-  header { text-align: center; margin-bottom: 22px; }
-  header .bn-logo { font-size: 44px; }
-  header p { color: var(--dim); max-width: 620px; margin: 10px auto 0; line-height: 1.5; font-size: 14px; }
-  .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px; }
-  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 18px; padding: 14px; display: flex; flex-direction: column; gap: 10px; }
-  .card h2 { font-size: 18px; display: flex; gap: 8px; align-items: center; }
-  .card h2 span { background: var(--accent); color: #111; border-radius: 8px; width: 28px; height: 28px; display: grid; place-items: center; font-size: 15px; }
-  .card p { font-size: 13px; color: var(--dim); line-height: 1.5; }
-  .preview { position: relative; background: #000; border-radius: 22px; border: 3px solid #2a3142; overflow: hidden; margin: 0 auto; }
-  .preview iframe { position: absolute; left: 0; top: 0; border: 0; transform-origin: 0 0; pointer-events: none; }
-  .card ul { font-size: 12px; line-height: 1.6; padding-left: 16px; }
-  .card ul .pro { color: #9be89b; } .card ul .con { color: #ff9a9a; }
-  .card .play { margin-top: auto; text-align: center; text-decoration: none; }
-  section.features { margin-top: 26px; background: var(--panel); border: 1px solid var(--line); border-radius: 18px; padding: 16px; }
-  section.features h3 { font-size: 15px; margin-bottom: 10px; }
-  .feat { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 6px 18px; font-size: 13px; color: var(--dim); line-height: 1.5; }
-  .feat b { color: var(--text); }
-  .specs { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 6px; margin-top: 12px; }
-  .spec { display: flex; gap: 8px; align-items: center; font-size: 12px; color: var(--dim); }
-  .spec i { flex: none; width: 22px; height: 22px; display: grid; place-items: center; font: 700 16px "Courier New", monospace; font-style: normal; background: #14161c; border: 2px solid; border-radius: 3px; }
-  .spec b { color: var(--text); }
+  /* Portrait layout for up to 4 players: a slim status line on top so the playfield gets
+     the space, your field on the left, the 3 opponents stacked on the right, special bar and
+     attack log under your field, and a large button pad at the bottom. */
+  body {
+    display: flex; flex-direction: column;
+    height: 100dvh;
+    padding: var(--safe-t) var(--safe-r) var(--safe-b) var(--safe-l);
+    background: #0b0d12 radial-gradient(120% 60% at 50% 0%, #17203a 0%, transparent 70%);
+  }
+  .bar {
+    flex: none; height: 26px; display: flex; align-items: center; gap: 10px;
+    padding: 0 6px 0 10px; border-bottom: 1px solid var(--line); background: #10141c;
+  }
+  .bar .logo { font: 900 13px "Arial Black", Impact, sans-serif; letter-spacing: -0.3px; }
+  .bar .logo span { color: var(--red); }
+  .bar .stats { flex: 1; display: flex; justify-content: center; gap: 12px; font: 600 11px ui-monospace, Menlo, monospace; color: var(--dim); }
+  .bar .stats b { color: var(--text); }
+  .bar .chat { position: relative; width: 34px; height: 24px; display: grid; place-items: center; font-size: 14px; border-radius: 6px; touch-action: manipulation; }
+  .bar .chat.unread::after { content: ""; position: absolute; top: 3px; right: 5px; width: 7px; height: 7px; border-radius: 50%; background: var(--accent); }
+
+  .main { flex: 1; min-height: 0; display: flex; gap: 6px; padding: 5px 6px 3px; }
+  .left { flex: 0 0 70%; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+  .me { flex: 0 1 auto; min-height: 0; width: 100%; aspect-ratio: 12 / 22; position: relative; }
+  .side { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+  .next-box { flex: none; display: flex; align-items: center; justify-content: center; height: 34px; background: var(--panel); border: 1px solid var(--line); border-radius: 6px; }
+  .next-box canvas { height: 30px; width: 100%; }
+  .opps { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: repeat(3, minmax(0, 1fr)); gap: 4px; }
+  .opp { position: relative; display: flex; flex-direction: column; min-height: 0; min-width: 0; border-radius: 4px; touch-action: manipulation; }
+  .opp .tag { display: flex; gap: 3px; align-items: baseline; font-size: 10px; line-height: 13px; overflow: hidden; white-space: nowrap; }
+  .opp .tag b { background: var(--blue); color: #fff; border-radius: 3px; padding: 0 3px; }
+  .opp .tag em { font-style: normal; color: var(--dim); overflow: hidden; text-overflow: ellipsis; }
+  .opp canvas { flex: 1; min-height: 0; }
+
+  .specials .lbl { display: flex; justify-content: space-between; font-size: 10px; line-height: 12px; color: var(--dim); margin-bottom: 2px; }
+  .specials .lbl b { color: var(--accent); }
+  .specials canvas { height: 16px; }
+
+  .log { flex: 1 1 30px; min-height: 30px; padding: 2px 6px; overflow: hidden; font: 11px/14px ui-monospace, Menlo, monospace; background: #07090d; border: 1px solid var(--line); border-radius: 6px; display: flex; flex-direction: column; justify-content: flex-end; }
+
+  .pad { flex: none; display: flex; flex-direction: column; gap: 6px; padding: 4px 6px 6px; }
+  .pad .row { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 6px; }
+  .pad button {
+    background: linear-gradient(#2a3040, #1b2030); border: 1px solid #3a4258; border-radius: 12px;
+    height: 64px; font-size: 26px; font-weight: 700; display: flex; align-items: center; justify-content: center;
+  }
+  .pad .t { height: 40px; font-size: 16px; background: linear-gradient(#2a2f4a, #1d2138); }
+  .pad .t.self { color: var(--green); }
+  .pad .t.dead { opacity: 0.3; }
+  .pad .drop { background: linear-gradient(#c2352c, #8a1d18); border-color: #e3554c; }
+  .pad .rot { background: linear-gradient(#2f5bff, #1a3ab8); border-color: #5b7cff; font-size: 30px; }
+
+  /* Partyline sheet */
+  .party { position: fixed; inset: auto 0 0 0; z-index: 40; height: 55dvh; background: var(--panel); border-top: 1px solid var(--line); border-radius: 16px 16px 0 0; display: flex; flex-direction: column; padding: 10px 12px calc(10px + var(--safe-b)); transform: translateY(105%); transition: transform .25s; }
+  .party.open { transform: none; }
+  .party h3 { font-size: 14px; display: flex; justify-content: space-between; align-items: center; }
+  .party h3 button { font-size: 12px; color: var(--dim); padding: 6px 10px; border: 1px solid var(--line); border-radius: 8px; touch-action: manipulation; }
+  .party .lines { flex: 1; overflow-y: auto; font: 12px/17px ui-monospace, Menlo, monospace; margin: 8px 0; }
+  .party .lines div { white-space: normal; }
+  .party form { display: flex; gap: 6px; }
+  .party input { flex: 1; font-size: 16px; padding: 10px; border-radius: 10px; background: var(--panel-2); color: var(--text); border: 1px solid var(--line); -webkit-user-select: text; user-select: text; }
+  .party form button { background: var(--accent); color: #111; font-weight: 700; padding: 0 14px; border-radius: 10px; touch-action: manipulation; }
 </style>
 </head>
 <body>
-<div class="wrap">
-  <header>
-    <div class="bn-logo">Blocks<span>Net</span></div>
-    <p>Study prototype of a multiplayer block-stacking game with special attacks. One shared game engine, three different phone UIs. Pick one to play against bots or friends online — previews below are live autoplay.</p>
-  </header>
+  <div class="bar">
+    <div class="logo">Blocks<span>Net</span></div>
+    <div class="stats"><span>LINES <b id="lines">0</b></span><span>LEVEL <b id="level">1</b></span></div>
+    <button class="chat" id="partyBtn" aria-label="Partyline chat">&#128172;</button>
+  </div>
 
-  <div class="cards">
-    <div class="card">
-      <h2><span>A</span>Classic Portrait</h2>
-      <div class="preview" data-w="390" data-h="844"><iframe src="option-a-classic.html?demo" width="390" height="844" title="Option A preview" loading="lazy"></iframe></div>
-      <p>The classic desktop multiplayer layout shrunk onto a phone: big field left, numbered opponent fields right, special bar and attack log underneath, and a button pad with target keys 1–6 and D.</p>
-      <ul>
-        <li class="pro">Most familiar to classic-style players</li>
-        <li class="pro">Precise buttons, partyline chat sheet</li>
-        <li class="con">Busiest screen; smallest own field</li>
-      </ul>
-      <a class="bn-btn-primary play" href="option-a-classic.html">Play option A</a>
+  <div class="main">
+    <div class="left">
+      <div class="me"><canvas id="meCanvas"></canvas></div>
+      <div class="specials">
+        <div class="lbl"><span>Specials</span><b id="specName">—</b></div>
+        <canvas id="spec"></canvas>
+      </div>
+      <div class="log" id="log"></div>
     </div>
-
-    <div class="card">
-      <h2><span>B</span>Swipe Focus</h2>
-      <div class="preview" data-w="390" data-h="844"><iframe src="option-b-swipe.html?demo" width="390" height="844" title="Option B preview" loading="lazy"></iframe></div>
-      <p>No on-screen buttons. Drag to move, tap to rotate, flick down to drop. Opponents in a strip on top; drag your special chip onto a player to fire it. Attacks appear as toasts.</p>
-      <ul>
-        <li class="pro">Largest playfield, modern mobile feel</li>
-        <li class="pro">Drag-to-target makes specials discoverable</li>
-        <li class="con">Gestures are less precise for fast play</li>
-      </ul>
-      <a class="bn-btn-primary play" href="option-b-swipe.html">Play option B</a>
-    </div>
-
-    <div class="card">
-      <h2><span>C</span>Landscape Arcade</h2>
-      <div class="preview" data-w="844" data-h="390"><iframe src="option-c-landscape.html?demo" width="844" height="390" title="Option C preview" loading="lazy"></iframe></div>
-      <p>Hold the phone sideways like a handheld console: D-pad on the left thumb, A/B rotate on the right, your field and a 3×2 board of every opponent in the middle — tap a field to attack it.</p>
-      <ul>
-        <li class="pro">All 6 fields readable at once</li>
-        <li class="pro">Two-thumb play, best for long sessions</li>
-        <li class="con">Requires rotating the phone</li>
-      </ul>
-      <a class="bn-btn-primary play" href="option-c-landscape.html">Play option C</a>
+    <div class="side">
+      <div class="next-box"><canvas id="next" aria-label="Next piece"></canvas></div>
+      <div class="opps" id="opps"></div>
     </div>
   </div>
 
-  <section class="features">
-    <h3>Game features</h3>
-    <div class="feat">
-      <div><b>12 × 22 field</b>, 7 tetrominoes in the classic blue / yellow / green / purple / red palette.</div>
-      <div><b>Up to 6 players</b>, each with a slot number 1–6 used for targeting.</div>
-      <div><b>Classic line sending</b>: clear 2 → 1 line, 3 → 2 lines, 4 → 4 lines to every opponent.</div>
-      <div><b>Specials</b> appear on your field when you clear lines; clear the line holding one to bank it (max 18).</div>
-      <div><b>Attacks / defense log</b> and <b>partyline</b> chat; <b>winlist</b> kept on the device.</div>
-      <div><b>Levels</b> speed up gravity as you clear lines; eliminated fields fill with junk.</div>
-      <div><b>Online rooms</b>: host a room, share the 5-letter code or invite link, play with up to 6 phones (empty slots filled by bots).</div>
-      <div><b>Speed settings</b>: five gravity presets from Relaxed to Insane, start level 1–50 and level-up rate.</div>
-      <div><b>Fullscreen</b> on Android / Linux browsers; on iPhone add it to the Home Screen.</div>
+  <div class="pad">
+    <div class="row" id="targets"></div>
+    <div class="row">
+      <button id="bL" aria-label="Move left">&#9664;</button>
+      <button id="bD" aria-label="Soft drop">&#9660;</button>
+      <button id="bR" aria-label="Move right">&#9654;</button>
+      <button id="bRot" class="rot" aria-label="Rotate">&#10227;</button>
+      <button id="bDrop" class="drop" aria-label="Hard drop">&#10515;</button>
     </div>
-    <div class="specs" id="specs"></div>
-  </section>
-</div>
+  </div>
+
+  <div class="party" id="party">
+    <h3>Partyline <button id="partyClose">Close</button></h3>
+    <div class="lines" id="partyLines"></div>
+    <form id="chatForm"><input id="chatIn" placeholder="Say something…" autocomplete="off"><button>Send</button></form>
+  </div>
 
 <script src="js/engine.js"></script>
+<script src="js/render.js"></script>
+<script src="js/vendor/peerjs.min.js"></script>
+<script src="js/net.js"></script>
+<script src="js/app.js"></script>
 <script>
-  document.getElementById('specs').innerHTML = Object.entries(BN.SPECIAL_INFO).map(([k, v]) =>
-    `<div class="spec"><i style="color:${v.color};border-color:${v.color}">${k}</i><span><b>${v.name}</b> — ${v.desc}</span></div>`).join('');
+(function () {
+  const R = BN.render;
+  const $ = id => document.getElementById(id);
+  let oppEls = [];
+  const logLines = [];
 
-  function scalePreviews() {
-    document.querySelectorAll('.preview').forEach(p => {
-      const w = +p.dataset.w, h = +p.dataset.h;
-      const maxW = p.parentElement.clientWidth - 28 - 6;
-      const maxH = 440;
-      const s = Math.min(maxW / w, maxH / h);
-      p.style.width = (w * s + 6) + 'px';
-      p.style.height = (h * s + 6) + 'px';
-      p.querySelector('iframe').style.transform = `scale(${s})`;
+  function buildOpps(app) {
+    const box = $('opps');
+    box.innerHTML = '';
+    oppEls = app.room.players.filter(p => p !== app.me).map(p => {
+      const el = document.createElement('div');
+      el.className = 'opp';
+      el.innerHTML = `<div class="tag"><b>${p.slot}</b><em>${p.name}</em></div><canvas></canvas>`;
+      el.addEventListener('click', () => app.act.use(p.slot));
+      box.appendChild(el);
+      return { p, el, canvas: el.querySelector('canvas') };
     });
+    // Target buttons 1-6 (+ D for discard), mirroring the number-key targeting.
+    const t = $('targets');
+    t.innerHTML = '';
+    app.room.players.forEach(p => {
+      const b = document.createElement('button');
+      b.className = 't' + (p === app.me ? ' self' : '');
+      b.textContent = p.slot;
+      b.dataset.slot = p.slot;
+      app.bindHold(b, () => app.act.use(p.slot), { repeat: false });
+      t.appendChild(b);
+    });
+    const d = document.createElement('button');
+    d.className = 't'; d.textContent = 'D';
+    app.bindHold(d, app.act.discard, { repeat: false });
+    t.appendChild(d);
   }
-  addEventListener('resize', scalePreviews);
-  scalePreviews();
+
+  function addLog(e) {
+    logLines.push(e);
+    if (logLines.length > 200) logLines.shift();
+    const div = `<div class="log-line log-${e.kind}">${e.text.replace(/</g, '&lt;')}</div>`;
+    const log = $('log');
+    log.insertAdjacentHTML('beforeend', div);
+    while (log.children.length > 12) log.firstChild.remove();
+    const pl = $('partyLines');
+    pl.insertAdjacentHTML('beforeend', div);
+    pl.scrollTop = pl.scrollHeight;
+    if (e.kind === 'chat' && !$('party').classList.contains('open')) $('partyBtn').classList.add('unread');
+  }
+
+  const app = BN.app({
+    title: 'Up to 4 players',
+    orientation: 'portrait',
+    subtitle: 'Buttons to move, rotate and drop. Number buttons 1–4 fire your first special at that player, D discards it. You can also tap an opponent field to target it.',
+    onSetup: buildOpps,
+    render(app) {
+      const me = app.me;
+      R.drawField($('meCanvas'), me, { grid: true, frame: '#3a4258', valign: 'top' });
+      R.drawNext($('next'), me.next);
+      R.drawSpecials($('spec'), me.inv);
+      $('specName').textContent = me.inv[0] ? BN.SPECIAL_INFO[me.inv[0]].name : '—';
+      $('lines').textContent = me.lines;
+      $('level').textContent = me.level;
+      for (const o of oppEls) R.drawField(o.canvas, o.p, { valign: 'top', highlight: me.inv.length && o.p.alive ? 'rgba(255,204,51,.6)' : null });
+      document.querySelectorAll('#targets .t[data-slot]').forEach(b => {
+        const p = app.room.bySlot(+b.dataset.slot);
+        b.classList.toggle('dead', !p || !p.alive);
+      });
+    },
+  });
+  app.room.on('log', addLog);
+
+  // Give your own field as much room as the screen allows: as tall as possible after the
+  // special bar and a 2-line log, but leaving at least ~24% of the width for opponents.
+  function sizeField() {
+    const main = document.querySelector('.main').getBoundingClientRect();
+    const reserved = document.querySelector('.specials').getBoundingClientRect().height + 30 + 8 + 8;
+    const byHeight = (main.height - reserved) * 12 / 22;
+    const w = Math.max(main.width * 0.6, Math.min(main.width * 0.76, byHeight));
+    document.querySelector('.left').style.flexBasis = Math.floor(w) + 'px';
+  }
+  addEventListener('resize', sizeField);
+  sizeField();
+
+  app.bindHold($('bL'), app.act.left);
+  app.bindHold($('bR'), app.act.right);
+  app.bindHold($('bD'), app.act.soft);
+  app.bindHold($('bRot'), app.act.rotate, { repeat: false });
+  app.bindHold($('bDrop'), app.act.drop, { repeat: false });
+
+  $('partyBtn').addEventListener('click', () => { $('party').classList.add('open'); $('partyBtn').classList.remove('unread'); });
+  $('partyClose').addEventListener('click', () => $('party').classList.remove('open'));
+  $('chatForm').addEventListener('submit', e => { e.preventDefault(); app.act.say($('chatIn').value); $('chatIn').value = ''; });
+})();
 </script>
 </body>
 </html>

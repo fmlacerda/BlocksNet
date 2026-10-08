@@ -2,48 +2,46 @@
 
 Dropping blocks multiplayer online action — a study project.
 
-It is a 6-player online block-stacking game with special attack blocks, built to run in the browser of iPhones and Linux phones (PinePhone / Librem 5 with Phosh or Plasma Mobile, Firefox or GNOME Web). The repo has one shared game engine and **three phone UI options** to compare.
+It is an online block-stacking game for up to 4 players with special attack blocks, built to run in the browser of iPhones and Linux phones (PinePhone / Librem 5 with Phosh or Plasma Mobile, Firefox or GNOME Web).
 
 ## Run it
 
-No build step and no dependencies. Serve the repo root and open it on the phone:
+No build step and no dependencies. Serve the repo root a## Play it
+
+**https://fmlacerda.github.io/BlocksNet/**
+
+To run it locally there is no build step and there are no dependencies. Serve the repo root and open it on the phone:
 
 ```sh
 python3 -m http.server 8000
 # phone on the same Wi-Fi → http://<your-computer-ip>:8000/
 ```
 
-Opening `index.html` straight from disk (`file://`) also works. On iOS use *Share → Add to Home Screen*, and on Linux phones use *Install / Add to home*, so it runs full-screen like an app.
+On iOS use *Share → Add to Home Screen*, and on Linux phones use *Install / Add to home*, so it runs full-screen like an app.
 
-## The three UI options
+## Layout and controls
 
-| | A · Classic Portrait | B · Swipe Focus | C · Landscape Arcade |
-|---|---|---|---|
-| File | `option-a-classic.html` | `option-b-swipe.html` | `option-c-landscape.html` |
-| Orientation | portrait | portrait | landscape |
-| Move / rotate / drop | on-screen button pad | drag, tap and flick gestures | D-pad + A/B buttons |
-| Fire special | buttons 1–6, D to discard, or tap a field | drag the special chip onto a player, or tap them | tap any field, ME button for self |
-| Opponents | 2-column list beside your field | strip across the top | 3×2 board |
-| Best for | classic-style players | casual / one-handed play | long sessions |
+Portrait, one hand-held layout:
 
-`index.html` shows all three side by side with live autoplay previews (`?demo` makes the local player a bot).
+- **Top line:** game name, lines, level, and the partyline chat button (a dot means unread messages).
+- **Your field** on the left, sized to the largest the screen allows. Under it are your specials (the first one is used next) and the attack log.
+- **The 3 opponents** stacked on the right, with the next piece above them. Tap an opponent to fire your special at them.
+- **Buttons:** 1–4 fire your first special at that player and D discards it. Below are ◀ ▼ ▶ to move and soft-drop, ⟳ to rotate (one direction only) and ⤓ to hard-drop.
 
-Keyboard also works for desktop testing: arrows to move, ↑/X/Z to rotate, Space to drop, 1–6 to fire a special at that player, D to discard.
+Keyboard also works for desktop testing: arrows to move, ↑/X/Z to rotate, Space to drop, 1–4 to fire a special, D to discard.
 
-## Game features
-
-- 12×22 field, 7 tetrominoes, original 5-colour block palette with bevelled blocks.
-- Up to 6 players with slot numbers 1–6, online with friends and/or bots.
+lock palette with bevelled blocks.
+- Up to 4 players with slot numbers 1–4, online with friends and/or bots.
 - Classic line sending: clearing 2 lines sends 1 to every opponent, 3 sends 2, 4 sends 4.
 - Specials appear on your field when you clear lines. Clearing the line that holds one banks it (inventory of up to 18). Default frequencies:
   `a` Add Line · `c` Clear Line · `n` Nuke Field · `r` Random Clear · `s` Switch Fields · `b` Clear Specials · `g` Block Gravity · `q` Blockquake · `o` Block Bomb.
 - Game speed settings in the lobby: **Speed** preset (Relaxed, Classic, Fast, Turbo, Insane), **Start level** (1–50) and **Level up** every 1–10 lines. Bots speed up to keep pace.
-- Level and gravity speed-up, junk-filled field when eliminated, attack/defense log, partyline chat (option A), and a winlist stored on the device.
+- Level and gravity speed-up, junk-filled field when eliminated, attack/defense log, partyline chat, and a winlist stored on the device.
 - Bots use a heuristic placement AI and use specials sensibly (gravity/nuke on themselves when high, switch when losing, and so on).
 
 ## Fullscreen
 
-- **Android and Linux phone browsers** (Firefox, Chromium, GNOME Web): leave *Play fullscreen* ticked in the lobby. The game goes fullscreen when you tap Start, and option C also locks to landscape.
+- **Android and Linux phone browsers** (Firefox, Chromium, GNOME Web): leave *Play fullscreen* ticked in the lobby. The game goes fullscreen and locks to portrait when you tap Start.
 - **iPhone**: Safari has no fullscreen mode for web pages. Use *Share → Add to Home Screen* and launch BlocksNet from the icon. It then opens without browser bars (the lobby shows this tip on iPhone).
 
 ## Code layout
@@ -55,18 +53,16 @@ js/net.js      online rooms: PeerJS / same-browser transports, host relay, room 
 js/app.js      shared shell: lobby, online room screens, game loop, keyboard, buttons, winlist, haptics
 js/vendor/     PeerJS 1.5.5 (MIT)
 css/common.css shared tokens, overlays, log colours
-option-*.html  the three layouts (only layout + input wiring)
+index.html     the game page: layout and button wiring
 ```
 
 ## Online multiplayer
 
-Up to 6 players on their own phones, with bots filling any empty slots.
+Up to 4 players on their own phones, with bots filling any empty slots.
 
 1. One player taps **Host a room**. A 5-character room code appears.
 2. Friends tap **Join a room** and enter the code, or open the invite link from **Share invite link** (`…?join=CODE`).
 3. The host picks how many bots to add and taps **Start game**. The host's speed settings apply to everyone.
-
-Each player can use any of the three UI options in the same room.
 
 **How it works.** Phones talk directly to each other over WebRTC, using PeerJS (bundled in `js/vendor/`, MIT licence). The free PeerJS cloud server only introduces the phones; no game data goes through it, and nothing needs hosting besides these static files.
 - **Each phone runs its own field.** The phone sends its field about 10 times a second, plus every line attack, special and chat message.
