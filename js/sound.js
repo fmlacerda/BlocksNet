@@ -48,7 +48,14 @@
   // them. Safari also needs a sound to actually be played during that gesture, so a silent
   // one-sample buffer is played each time the context is (re)started.
   function unlock() {
+    // iOS can leave the context 'interrupted' after the app was in the background, and
+    // resume() then never succeeds. If a previous resume failed, start a fresh context.
+    if (ctx && ctx.state !== 'running' && ctx._stuck) {
+      try { ctx.close(); } catch (e) { /* ignore */ }
+      ctx = null;
+    }
     if (!init()) return;
+    if (htmlAudio && htmlAudio.paused) { const pr = htmlAudio.play(); if (pr && pr.catch) pr.catch(() => {}); }
     // Older iOS: a playing <audio> element switches the page to the media audio session,
     // so the silent switch no longer mutes Web Audio.
     if (isIOS && !navigator.audioSession && !htmlAudio) {
@@ -68,6 +75,8 @@
         src.start(0);
       } catch (e) { /* ignore */ }
       if (ctx.resume) ctx.resume().catch(() => {});
+      const c = ctx;
+      setTimeout(() => { if (c === ctx && c.state !== 'running') c._stuck = true; }, 400);
     }
   }
   ['pointerdown', 'pointerup', 'touchstart', 'touchend', 'mousedown', 'click', 'keydown']
