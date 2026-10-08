@@ -28,6 +28,10 @@
   const cleanText = t => String(t || '').slice(0, 200);
 
   const params = new URLSearchParams(location.search);
+  const JOIN_TIMEOUT = 20000;
+  const NO_DIRECT = "Couldn't connect to the host's phone. Check that the host still has BlocksNet open " +
+    "on the room screen (not switched to another app), then tap Join again. If it keeps failing, put both " +
+    'phones on the same Wi-Fi: some mobile networks block direct phone-to-phone connections.';
 
   // ------------------------------------------------------------ transports
   // A connection is { id, send(msg), onMessage(fn), onClose(fn), close() }.
@@ -82,15 +86,28 @@
       peer.on('disconnected', () => { try { if (!peer.destroyed) peer.reconnect(); } catch (e) { /* ignore */ } });
       return () => { try { peer.destroy(); } catch (e) { /* ignore */ } };
     },
-    join(code, { onOpen, onError }) {
+    join(code, { onOpen, onError, onStage }) {
       if (!window.Peer) { onError('Online library failed to load.'); return () => {}; }
       const peer = new window.Peer(peerOptions());
-      let opened = false;
+      let opened = false, failed = false;
+      const fail = (text, type) => {
+        if (opened || failed) return;
+        failed = true;
+        clearTimeout(timer);
+        onError(text, type);
+      };
+      // Without this, a connection that can never be made (e.g. strict mobile networks and no
+      // working relay) would leave the guest on "Connecting…" forever.
+      const timer = setTimeout(() => fail(NO_DIRECT, 'timeout'), JOIN_TIMEOUT);
+      onStage && onStage('Reaching the connection server…');
       peer.on('open', () => {
+        onStage && onStage(`Contacting the host's phone (room ${code})…`);
         const conn = peer.connect(ID_PREFIX + code.toLowerCase(), { reliable: true });
-        conn.on('open', () => { opened = true; onOpen(wrapPeerConn(conn)); });
+        conn.on('open', () => { if (failed) return; opened = true; clearTimeout(timer); onOpen(wrapPeerConn(conn)); });
+        conn.on('error', () => fail(NO_DIRECT, 'webrtc'));
+        conn.on('close', () => fail(NO_DIRECT, 'webrtc'));
       });
-      peer.on('error', err => { if (!opened || err.type !== 'peer-unavailable') onError(peerErrorText(err), err.type); });
+      peer.on('error', err => { if (!opened || err.type !== 'peer-unavailable') fail(peerErrorText(err), err.type); });
       peer.on('disconnected', () => { try { if (!peer.destroyed) peer.reconnect(); } catch (e) { /* ignore */ } });
       return () => { try { peer.destroy(); } catch (e) { /* ignore */ } };
     },
@@ -175,11 +192,22 @@
       this.name = cleanName(name);
       this.code = newCode();
       this.emit('status', 'Creating room…');
+      this.ready = false;
       this.teardown = transport.host(this.code, {
-        onReady: code => { this.emit('status', ''); this.broadcastLobby(); this.emit('ready', code); },
+        onReady: code => {
+          if (this.ready) { this.emit('status', ''); return; }   // signalling reconnected
+          this.ready = true;
+          this.emit('status', ''); this.broadcastLobby(); this.emit('ready', code);
+        },
         onConnection: conn => this.acceptGuest(conn),
         onError: (text, type) => {
-          if (type === 'unavailable-id' && attempt < 3) { this.teardown && this.teardown(); this.host(name, attempt + 1); return; }
+          if (type === 'unavailable-id' && !this.ready && attempt < 3) { this.teardown && this.teardown(); this.host(name, attempt + 1); return; }
+          if (this.ready && ['network', 'socket-error', 'server-error', 'disconnected', 'unavailable-id'].includes(type)) {
+            // Room already open: the connection server dropped (e.g. app was in the background).
+            // Players already in the room stay connected; PeerJS reconnects in the background.
+            this.emit('status', 'Reconnecting to the connection server… new players may not be able to join for a moment.');
+            return;
+          }
           this.emit('error', text);
         },
       });
@@ -279,6 +307,7 @@
           conn.send({ t: 'hello', v: PROTO, name: this.name });
         },
         onError: text => this.emit('error', text),
+        onStage: text => this.emit('status', text),
       });
     }
 
