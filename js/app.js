@@ -82,8 +82,37 @@
             <label>Level up<select id="bn-lpl">${opt(LINES_PER_LEVEL, s.linesPerLevel, n => `${n} line${n > 1 ? 's' : ''}`)}</select></label>
           </div>
           ${fsRow}
-          <button class="bn-btn-primary" id="bn-start">Start game</button>
+          <p class="bn-status error" id="bn-lobby-msg"></p>
+          <button class="bn-btn-primary" id="bn-start">Play vs bots</button>
+          ${BN.net ? `<div class="bn-divider"><span>or play online with friends</span></div>
+          <div class="bn-row">
+            <button class="bn-btn-secondary" id="bn-host">Host a room</button>
+            <button class="bn-btn-secondary" id="bn-join-open">Join a room</button>
+          </div>` : ''}
           <a class="bn-back" href="index.html">&larr; all UI options</a>
+        </div>
+      </div>
+      <div class="bn-overlay hidden" id="bn-online">
+        <div class="bn-panel">
+          <div class="bn-logo">Blocks<span>Net</span></div>
+          <div class="bn-sub" id="bn-on-title">Online room</div>
+          <div id="bn-on-join" class="bn-stack hidden">
+            <label>Your nickname<input id="bn-join-name" maxlength="12" autocomplete="off"></label>
+            <label>Room code<input id="bn-code" maxlength="5" autocapitalize="characters" autocomplete="off" spellcheck="false" placeholder="ABCDE"></label>
+            <button class="bn-btn-primary" id="bn-join">Join</button>
+          </div>
+          <div id="bn-on-room" class="bn-stack hidden">
+            <div class="bn-code-box"><small>Room code</small><b id="bn-code-show">·····</b></div>
+            <button class="bn-btn-secondary" id="bn-share">Share invite link</button>
+            <ol class="bn-plist" id="bn-plist"></ol>
+            <div id="bn-host-ctl" class="bn-stack">
+              <label>Fill empty slots with bots<select id="bn-fill">${[0, 1, 2, 3, 4, 5].map(n => `<option ${n === 0 ? 'selected' : ''}>${n}</option>`).join('')}</select></label>
+              <button class="bn-btn-primary" id="bn-on-start">Start game</button>
+            </div>
+            <p class="bn-hint" id="bn-wait">Waiting for the host to start the game…</p>
+          </div>
+          <p class="bn-status" id="bn-on-status"></p>
+          <button class="bn-btn-ghost" id="bn-leave">Leave room</button>
         </div>
       </div>
       <div class="bn-overlay hidden" id="bn-end">
@@ -91,6 +120,7 @@
           <div class="bn-logo" id="bn-end-title">Game over</div>
           <div class="bn-sub">Winlist</div>
           <ol class="bn-winlist" id="bn-winlist"></ol>
+          <p class="bn-hint hidden" id="bn-end-wait">Waiting for the host to start the next game…</p>
           <button class="bn-btn-primary" id="bn-again">Play again</button>
           <button class="bn-btn-ghost" id="bn-lobby-btn">Change settings</button>
         </div>
@@ -106,8 +136,8 @@
     document.body.appendChild(wrap);
     const $ = id => document.getElementById(id);
 
-    function setup() {
-      const name = ($('bn-name').value.trim() || 'Player').slice(0, 12);
+    function readSettings() {
+      const name = BN.net ? BN.net.cleanName($('bn-name').value) : ($('bn-name').value.trim() || 'Player').slice(0, 12);
       const bots = +$('bn-bots').value;
       const skill = $('bn-skill').value;
       const speed = $('bn-speed').value;
@@ -115,8 +145,15 @@
       const linesPerLevel = +$('bn-lpl').value;
       const fullscreen = $('bn-fs') ? $('bn-fs').checked : DEFAULTS.fullscreen;
       store.set('settings', { name, bots, skill, speed, startLevel, linesPerLevel, fullscreen });
-      room.settings = demo ? Object.assign({}, BN.DEFAULT_SETTINGS) : { speed, startLevel, linesPerLevel };
       app.fullscreen = fullscreen;
+      return { name, bots, skill, game: { speed, startLevel, linesPerLevel } };
+    }
+
+    function setup() {
+      const { name, bots, skill, game } = readSettings();
+      room.settings = demo ? Object.assign({}, BN.DEFAULT_SETTINGS) : game;
+      room.net = null;
+      room.authority = true;
       room.players = []; room.bots = [];
       app.me = room.addPlayer(name, demo ? { local: true, bot: true, skill: 0.6 } : { local: true });
       const names = BOT_NAMES.slice().sort(() => Math.random() - 0.5);
@@ -135,8 +172,124 @@
     }
 
     $('bn-start').addEventListener('click', () => { setup(); start(); });
-    $('bn-again').addEventListener('click', start);
-    $('bn-lobby-btn').addEventListener('click', () => { $('bn-end').classList.add('hidden'); $('bn-lobby').classList.remove('hidden'); });
+    $('bn-again').addEventListener('click', () => { if (session && session.isHost) hostStart(); else if (!session) start(); });
+    $('bn-lobby-btn').addEventListener('click', () => {
+      $('bn-end').classList.add('hidden');
+      $((session ? 'bn-online' : 'bn-lobby')).classList.remove('hidden');
+    });
+
+    // ---------------------------------------------------------- online play
+    let session = null;
+    const show = (id, on) => $(id).classList.toggle('hidden', !on);
+    const status = (text, isError) => { $('bn-on-status').textContent = text || ''; $('bn-on-status').classList.toggle('error', !!isError); };
+
+    function sanitizeSettings(g) {
+      g = g || {};
+      return {
+        speed: BN.SPEEDS[g.speed] ? g.speed : 'classic',
+        startLevel: Math.max(1, Math.min(99, g.startLevel | 0 || 1)),
+        linesPerLevel: Math.max(1, Math.min(20, g.linesPerLevel | 0 || 2)),
+      };
+    }
+
+    function openOnline(mode) {
+      show('bn-lobby', false); show('bn-end', false); show('bn-online', true);
+      show('bn-on-join', mode === 'join');
+      show('bn-on-room', mode !== 'join');
+      show('bn-host-ctl', mode === 'host');
+      show('bn-wait', mode === 'guest');
+      $('bn-on-title').textContent = mode === 'host' ? 'Your room' : mode === 'guest' ? 'Joined room' : 'Join a room';
+    }
+
+    function leaveOnline(message) {
+      if (session) { const s = session; session = null; s.close(); }
+      room.net = null;
+      room.authority = true;
+      room.running = false;
+      show('bn-online', false); show('bn-end', false); show('bn-lobby', true);
+      if (message) room.log(message, 'system');
+      setup();
+    }
+
+    function newSession() {
+      if (session) session.close();
+      const s = session = new BN.net.Session();
+      s.on('status', t => status(t));
+      s.on('error', t => { status(t, true); if (!s.isHost && !s.conn) { s.close(); session = null; } });
+      s.on('closed', t => { if (session === s) { leaveOnline(); $('bn-lobby-msg').textContent = t; } });
+      s.on('ready', code => { $('bn-code-show').textContent = code; });
+      s.on('lobby', l => {
+        if (!s.isHost && $('bn-on-join') && !$('bn-on-join').classList.contains('hidden')) openOnline('guest');
+        $('bn-code-show').textContent = l.code || s.code;
+        $('bn-plist').innerHTML = l.players.map(p => `<li>${p.name}${p.host ? ' <em>host</em>' : ''}</li>`).join('');
+        const free = 6 - l.players.length;
+        const fill = $('bn-fill');
+        [...fill.options].forEach(o => { o.disabled = +o.value > free; });
+        if (+fill.value > free) fill.value = String(free);
+      });
+      s.on('start', msg => {
+        if (session !== s) return;
+        room.settings = sanitizeSettings(msg.settings);
+        room.players = []; room.bots = [];
+        for (const p of msg.players) {
+          const mine = p.owner === msg.me;
+          room.addPlayer(p.name, { slot: p.slot, remote: !mine, bot: mine && p.bot, local: mine && !p.bot, skill: p.skill ?? 0.5 });
+        }
+        app.me = room.players.find(p => p.isLocal) || room.players[0];
+        room.net = s;
+        room.authority = s.isHost;
+        config.onSetup && config.onSetup(app);
+        show('bn-online', false);
+        start();
+      });
+      s.on('game', m => room.receive(m));
+      s.on('chat', c => room.log(c.system ? c.text : `<${c.name}> ${c.text}`, c.system ? 'system' : 'chat'));
+      return s;
+    }
+
+    function hostStart() {
+      const { skill, game } = readSettings();
+      session.startGame(game, +$('bn-fill').value, SKILLS[skill]);
+    }
+
+    if (BN.net && !demo) {
+      const clearMsg = () => { $('bn-lobby-msg').textContent = ''; };
+      ['bn-host', 'bn-join-open', 'bn-start'].forEach(id => $(id).addEventListener('click', clearMsg));
+      $('bn-host').addEventListener('click', () => {
+        const { name } = readSettings();
+        if (app.fullscreen) enterFullscreen(!!config.landscape);
+        $('bn-plist').innerHTML = '';
+        $('bn-code-show').textContent = '·····';
+        openOnline('host');
+        newSession().host(name);
+      });
+      const openJoin = () => { status(''); $('bn-join-name').value = $('bn-name').value; openOnline('join'); };
+      $('bn-join-open').addEventListener('click', () => { openJoin(); $('bn-code').focus(); });
+      $('bn-join').addEventListener('click', () => {
+        $('bn-name').value = $('bn-join-name').value;
+        const { name } = readSettings();
+        if (app.fullscreen) enterFullscreen(!!config.landscape);
+        $('bn-plist').innerHTML = '';
+        newSession().join($('bn-code').value, name);
+      });
+      $('bn-code').addEventListener('input', e => { e.target.value = BN.net.cleanCode(e.target.value); });
+      $('bn-code').addEventListener('keydown', e => { if (e.key === 'Enter') $('bn-join').click(); });
+      $('bn-on-start').addEventListener('click', hostStart);
+      $('bn-leave').addEventListener('click', () => leaveOnline());
+      $('bn-share').addEventListener('click', async () => {
+        if (!session) return;
+        const url = session.inviteLink();
+        try {
+          if (navigator.share) { await navigator.share({ title: 'BlocksNet', text: `Join my BlocksNet room ${session.code}`, url }); return; }
+        } catch (e) { if (e && e.name === 'AbortError') return; }
+        try { await navigator.clipboard.writeText(url); status('Invite link copied.'); }
+        catch (e) { status(url); }
+      });
+      addEventListener('pagehide', () => { if (session) session.close(); });
+      // Invite links look like ...?join=ABCDE
+      const invite = new URLSearchParams(location.search).get('join');
+      if (invite) { $('bn-code').value = BN.net.cleanCode(invite); openJoin(); }
+    }
 
     room.on('end', winner => {
       if (demo) { setTimeout(start, 2500); return; }
@@ -145,11 +298,16 @@
       store.set('winlist', wins);
       const youWon = winner === app.me;
       if (youWon) haptic([30, 40, 30, 40, 80]);
+      const guest = !!(session && !session.isHost);
+      show('bn-again', !guest);
+      show('bn-end-wait', guest);
+      $('bn-lobby-btn').textContent = session ? 'Back to room' : 'Change settings';
       setTimeout(() => {
+        if (!room.running) show('bn-online', false);
         $('bn-end-title').innerHTML = winner ? (youWon ? 'You <span>win!</span>' : `${winner.name} <span>wins</span>`) : 'Game <span>over</span>';
         $('bn-winlist').innerHTML = Object.entries(wins).sort((a, b) => b[1] - a[1]).slice(0, 8)
           .map(([n, w]) => `<li><span>${n}</span><b>${w}</b></li>`).join('');
-        $('bn-end').classList.remove('hidden');
+        if (!room.running) $('bn-end').classList.remove('hidden');
       }, 900);
       const b = room.players.find(p => p.isBot);
       if (b) setTimeout(() => room.log(`<${b.name}> ${BOT_CHAT[Math.floor(Math.random() * BOT_CHAT.length)]}`, 'chat'), 500);
@@ -176,7 +334,10 @@
       drop: () => app.me && app.me.hardDrop(),
       use: slot => app.me && room.useSpecial(app.me, slot),
       discard: () => app.me && room.discardSpecial(app.me),
-      say: text => { if (text.trim()) room.log(`<${app.me ? app.me.name : 'you'}> ${text.trim()}`, 'chat'); },
+      say: text => {
+        if (session) session.chat(text);
+        else if (text.trim()) room.log(`<${app.me ? app.me.name : 'you'}> ${text.trim()}`, 'chat');
+      },
     };
     app.act = act;
     BN.current = app;   // handy from the dev console
@@ -192,7 +353,8 @@
       else if (/^[1-6]$/.test(k)) act.use(+k);
     });
 
-    document.addEventListener('visibilitychange', () => { room.paused = document.hidden; });
+    // Online games can't pause: other phones keep playing.
+    document.addEventListener('visibilitychange', () => { room.paused = document.hidden && !room.net; });
     // Block iOS pinch / double-tap zoom while playing.
     document.addEventListener('gesturestart', e => e.preventDefault());
     let lastTouch = 0;

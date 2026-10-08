@@ -96,6 +96,19 @@
     return false;
   }
 
+  // Compact field encoding for the network: one char per cell, '0'-'5' or a special letter.
+  const encodeField = f => f.map(r => r.map(v => (typeof v === 'string' ? v : String(v))).join('')).join('');
+  function decodeField(str) {
+    const f = emptyField();
+    if (typeof str !== 'string' || str.length !== W * H) return f;
+    for (let i = 0; i < W * H; i++) {
+      const c = str[i];
+      f[Math.floor(i / W)][i % W] = c >= '0' && c <= '5' ? +c : (SPECIAL_INFO[c] ? c : 0);
+    }
+    return f;
+  }
+  const cloneField = f => f.map(r => r.slice());
+
   function stackHeight(field) {
     for (let y = 0; y < H; y++) if (field[y].some(v => v)) return H - y;
     return 0;
@@ -110,6 +123,7 @@
       this.team = opts.team || '';
       this.isBot = !!opts.bot;
       this.isLocal = !!opts.local;
+      this.remote = !!opts.remote;  // simulated on another phone; we only mirror its field
       this.reset();
     }
 
@@ -247,7 +261,7 @@
 
     update(dt) {
       if (this.flash > 0) this.flash = Math.max(0, this.flash - dt);
-      if (!this.alive || !this.piece) return;
+      if (!this.alive || !this.piece || this.remote) return;
       this.dropTimer += dt;
       const iv = this.dropInterval;
       while (this.dropTimer >= iv && this.piece) {
@@ -434,6 +448,13 @@
   // A Room is the authority that routes lines and specials between players.
   // For real multiplayer this same object runs on a server; clients send
   // intents (move/rotate/drop/useSpecial) and receive field snapshots.
+  /*
+   * A Room holds every player in the game. Players simulated on this device
+   * (you, and bots on the host) run their own physics; "remote" players are
+   * mirrors of fields simulated on other phones. Line attacks and specials are
+   * originated by the owner of the attacking player, sent over `room.net`, and
+   * applied by whichever device owns each target. Offline, everything is local.
+   */
   class Room {
     constructor() {
       this.players = [];
@@ -444,15 +465,19 @@
       this.paused = false;
       this.elapsed = 0;
       this.winner = null;
+      this.net = null;          // { send(msg) } when playing online
+      this.authority = true;    // decides when the game ends (offline or host)
+      this.syncTimer = 0;
+      this.lastSync = {};
     }
 
     on(ev, fn) { (this.listeners[ev] = this.listeners[ev] || []).push(fn); return this; }
     emit(ev, data) { (this.listeners[ev] || []).forEach(fn => fn(data)); }
 
     addPlayer(name, opts = {}) {
-      const p = new Player(this, this.players.length + 1, name, opts);
+      const p = new Player(this, opts.slot || this.players.length + 1, name, opts);
       this.players.push(p);
-      if (opts.bot) this.bots.push(new BotBrain(p, opts.skill ?? 0.5));
+      if (opts.bot && !opts.remote) this.bots.push(new BotBrain(p, opts.skill ?? 0.5));
       return p;
     }
 
@@ -464,13 +489,16 @@
 
     log(text, kind = 'info') { this.emit('log', { text, kind, t: this.elapsed }); }
 
+    send(msg) { if (this.net) this.net.send(msg); }
+
     start() {
       this.players.forEach(p => p.reset());
-      this.players.forEach(p => p.spawn());
+      this.players.forEach(p => { if (!p.remote) p.spawn(); });
       this.running = true;
       this.paused = false;
       this.elapsed = 0;
       this.winner = null;
+      this.lastSync = {};
       this.log('*** The game has started ***', 'system');
       this.emit('start');
     }
@@ -481,47 +509,103 @@
       this.elapsed += dt;
       for (const b of this.bots) b.update(dt);
       for (const p of this.players) p.update(dt);
+      if (this.net && (this.syncTimer += dt) >= 100) { this.syncTimer = 0; this.syncFields(); }
+    }
+
+    // Send our own players' fields (about 10 times a second, only when changed).
+    syncFields() {
+      for (const p of this.players) {
+        if (p.remote || !p.alive) continue;
+        const f = encodeField(p.field);
+        const pc = p.piece ? { type: p.piece.type, rot: p.piece.rot, x: p.piece.x, y: p.piece.y } : null;
+        const key = f + JSON.stringify(pc) + p.lines + p.inv.join('');
+        if (this.lastSync[p.slot] === key) continue;
+        this.lastSync[p.slot] = key;
+        this.send({ t: 'f', slot: p.slot, f, pc, lines: p.lines, level: p.level, inv: p.inv.join('') });
+      }
+    }
+
+    // Apply a message that came from another phone.
+    receive(m) {
+      const from = this.bySlot(m.from || m.slot);
+      switch (m.t) {
+        case 'f':
+          if (from && from.remote && from.alive && this.running) {
+            from.field = decodeField(m.f);
+            from.piece = m.pc && SHAPES[m.pc.type] ? { type: m.pc.type, rot: m.pc.rot & 3, x: m.pc.x | 0, y: m.pc.y | 0 } : null;
+            from.lines = m.lines | 0;
+            from.level = m.level | 0;
+            from.inv = String(m.inv || '').split('').filter(c => SPECIAL_INFO[c]);
+          }
+          break;
+        case 'lines':
+          if (from && this.running) this.applyLines(from, m.n | 0);
+          break;
+        case 'special': {
+          const to = this.bySlot(m.to);
+          if (from && to && SPECIAL_INFO[m.s] && this.running) this.applySpecial(from, to, m.s, m.field);
+          break;
+        }
+        case 'dead':
+          if (from && from.remote && from.alive) from.die();
+          break;
+        case 'end':
+          this.finish(m.winner ? this.bySlot(m.winner) : null, true);
+          break;
+      }
     }
 
     onLinesCleared(p, n) {
       const send = { 2: 1, 3: 2, 4: 4 }[n] || 0;
       if (!send) return;
-      const targets = this.opponentsOf(p);
-      targets.forEach(o => { o.addLines(send); o.hit('a'); });
-      this.log(`${send} line${send > 1 ? 's' : ''} added to all by ${p.name}`, 'lines');
-      this.emit('lines', { from: p, count: send, targets });
+      this.applyLines(p, send);
+      this.send({ t: 'lines', from: p.slot, n: send });
+    }
+
+    applyLines(from, n) {
+      const targets = this.opponentsOf(from);
+      targets.forEach(o => { if (!o.remote) o.addLines(n); o.hit('a'); });
+      this.log(`${n} line${n > 1 ? 's' : ''} added to all by ${from.name}`, 'lines');
+      this.emit('lines', { from, count: n, targets });
     }
 
     useSpecial(from, slot) {
-      if (!this.running || !from.alive || !from.inv.length) return false;
+      if (!this.running || !from.alive || !from.inv.length || from.remote) return false;
       const target = this.bySlot(slot);
       if (!target || !target.alive) return false;
       const s = from.inv.shift();
-      switch (s) {
-        case 'a': target.addLines(1); break;
-        case 'c': target.clearBottomLine(); break;
-        case 'n': target.nuke(); break;
-        case 'r': target.randomClear(); break;
-        case 'b': target.clearSpecials(); break;
-        case 'g': target.gravity(); break;
-        case 'q': target.quake(); break;
-        case 'o': target.bomb(); break;
-        case 's': {
-          if (target !== from) {
-            const tmp = from.field; from.field = target.field; target.field = tmp;
-            from.makeHeadroom(); target.makeHeadroom();
-            from.fixPiece();
-          }
-          break;
+      const field = s === 's' ? encodeField(from.field) : undefined;
+      this.applySpecial(from, target, s, field);
+      this.send({ t: 'special', from: from.slot, to: slot, s, field });
+      return true;
+    }
+
+    // Only fields simulated on this device are changed; remote ones update via sync.
+    applySpecial(from, target, s, fromFieldStr) {
+      if (!target.remote) {
+        switch (s) {
+          case 'a': target.addLines(1); break;
+          case 'c': target.clearBottomLine(); break;
+          case 'n': target.nuke(); break;
+          case 'r': target.randomClear(); break;
+          case 'b': target.clearSpecials(); break;
+          case 'g': target.gravity(); break;
+          case 'q': target.quake(); break;
+          case 'o': target.bomb(); break;
         }
       }
-      target.fixPiece();
+      if (s === 's' && target !== from) {
+        const fromField = fromFieldStr ? decodeField(fromFieldStr) : cloneField(from.field);
+        const targetField = cloneField(target.field);
+        if (!from.remote) { from.field = targetField; from.makeHeadroom(); from.fixPiece(); }
+        if (!target.remote) { target.field = fromField; target.makeHeadroom(); }
+      }
+      if (!target.remote) target.fixPiece();
       target.hit(s);
       const info = SPECIAL_INFO[s];
       const kind = target === from ? 'self' : (info.hostile ? 'attack' : 'special');
       this.log(`${info.name} on ${target === from ? 'self' : target.name} by ${from.name}`, kind);
       this.emit('special', { from, target, special: s });
-      return true;
     }
 
     discardSpecial(p) {
@@ -532,16 +616,20 @@
     onDeath(p) {
       this.log(`${p.name} has been eliminated`, 'death');
       this.emit('death', p);
+      if (!p.remote) this.send({ t: 'dead', slot: p.slot });
       const alive = this.players.filter(o => o.alive);
       const teams = new Set(alive.map(o => o.team || '#' + o.slot));
       if (this.players.length > 1 && teams.size <= 1) this.finish(alive[0] || p);
       else if (this.players.length === 1) this.finish(null);
     }
 
-    finish(winner) {
+    // Only the authority (offline game or online host) ends a game; guests wait for 'end'.
+    finish(winner, fromNet = false) {
       if (!this.running) return;
+      if (!this.authority && !fromNet) return;
       this.running = false;
       this.winner = winner;
+      if (this.authority) this.send({ t: 'end', winner: winner ? winner.slot : 0 });
       this.log(winner ? `*** ${winner.team ? 'Team ' + winner.team : winner.name} wins! ***` : '*** Game over ***', 'system');
       this.emit('end', winner);
     }
@@ -549,6 +637,6 @@
 
   global.BN = Object.assign(global.BN || {}, {
     W, H, MAX_INV, COLORS, SHAPES, SPECIAL_INFO, SPECIAL_FREQ, SPEEDS, DEFAULT_SETTINGS,
-    Room, Player, BotBrain, pieceCells, isSpecial,
+    Room, Player, BotBrain, pieceCells, isSpecial, encodeField, decodeField,
   });
 })(window);
