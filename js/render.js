@@ -76,8 +76,16 @@
 
     if (!player) return { s, ox, oy };
     const f = player.field;
-    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++)
-      if (f[y][x]) drawBlock(ctx, ox + x * s, oy + y * s, s, f[y][x], player.alive ? 1 : 0.35);
+    // On small (opponent) fields a special's letter would be unreadable inside its cell,
+    // so specials are drawn afterwards as larger coloured badges on top of the blocks.
+    const badges = s < 12 && player.alive ? [] : null;
+    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+      const v = f[y][x];
+      if (!v) continue;
+      if (badges && isSpecial(v)) { badges.push([x, y, v]); continue; }
+      drawBlock(ctx, ox + x * s, oy + y * s, s, v, player.alive ? 1 : 0.35);
+    }
+    if (badges) for (const [x, y, v] of badges) drawBadge(ctx, ox + (x + 0.5) * s, oy + (y + 0.5) * s, s, v);
 
     // Special inventory drawn inside the top row of the field, semi-transparent so the
     // blocks underneath stay visible; the falling piece is drawn on top of it.
@@ -125,6 +133,23 @@
       ctx.fillText('OUT', ox + (s * W) / 2, oy + (s * H) / 2);
     }
     return { s, ox, oy };
+  }
+
+  function drawBadge(ctx, cx, cy, s, v) {
+    const b = Math.max(10, s * 1.7);
+    const x = cx - b / 2, y = cy - b / 2, r = b * 0.22;
+    ctx.fillStyle = SPECIAL_INFO[v].color;
+    ctx.strokeStyle = '#000';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(x + r, y); ctx.arcTo(x + b, y, x + b, y + b, r); ctx.arcTo(x + b, y + b, x, y + b, r);
+    ctx.arcTo(x, y + b, x, y, r); ctx.arcTo(x, y, x + b, y, r); ctx.closePath();
+    ctx.fill(); ctx.stroke();
+    ctx.fillStyle = '#0b0d12';
+    ctx.font = `800 ${Math.round(b * 0.82)}px "Courier New", monospace`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(v, cx, cy + b * 0.04);
   }
 
   function drawInventory(ctx, inv, ox, oy, s, alpha) {
