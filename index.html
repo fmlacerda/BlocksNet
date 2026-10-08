@@ -18,7 +18,9 @@
      attack log under your field, and a large button pad at the bottom. */
   body {
     display: flex; flex-direction: column;
-    height: 100dvh;
+    /* --app-h is the real window height, measured by script below: iOS Home Screen apps
+       report 100dvh about one status bar too short, which left an empty band at the bottom. */
+    height: var(--app-h, 100dvh);
     padding: var(--safe-t) var(--safe-r) var(--safe-b) var(--safe-l);
     background: #0b0d12 radial-gradient(120% 60% at 50% 0%, #17203a 0%, transparent 70%);
   }
@@ -65,7 +67,7 @@
   .pad .row { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 6px; }
   .pad button {
     background: linear-gradient(#2a3040, #1b2030); border: 1px solid #3a4258; border-radius: 12px;
-    height: 64px; font-size: 26px; font-weight: 700; display: flex; align-items: center; justify-content: center;
+    height: var(--btn-h, 64px); font-size: 26px; font-weight: 700; display: flex; align-items: center; justify-content: center;
   }
   .pad .t { height: 40px; font-size: 16px; background: linear-gradient(#2a2f4a, #1d2138); }
   .pad .t.self { color: var(--green); }
@@ -86,6 +88,15 @@
 </style>
 </head>
 <body>
+<script>
+  (function () {
+    const set = () => document.documentElement.style.setProperty('--app-h', window.innerHeight + 'px');
+    set();
+    addEventListener('resize', set);
+    addEventListener('orientationchange', () => setTimeout(set, 300));
+    if (window.visualViewport) visualViewport.addEventListener('resize', set);
+  })();
+</script>
   <div class="bar">
     <div class="logo">Blocks<span>Net</span></div>
     <div class="stats"><span>LINES <b id="lines">0</b></span><span>LEVEL <b id="level">1</b></span></div>
@@ -236,14 +247,24 @@
 
   // Give your own field as much room as the screen allows: as tall as possible after the
   // special bar and a 2-line log, but leaving at least ~24% of the width for opponents.
-  function sizeField() {
+  function sizeField(again = true) {
     const main = document.querySelector('.main').getBoundingClientRect();
     const reserved = document.querySelector('.specials').getBoundingClientRect().height + $('log').getBoundingClientRect().height + 8 + 4;
     const byHeight = (main.height - reserved) * 12 / 22;
     const w = Math.max(main.width * 0.6, Math.min(main.width * 0.76, byHeight));
     document.querySelector('.left').style.flexBasis = Math.floor(w) + 'px';
+    // On tall screens the field hits its width limit first; give the spare height to the
+    // move/rotate/drop buttons (64px up to 88px) instead of leaving a gap.
+    const cur = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--btn-h')) || 64;
+    const spare = (main.height - reserved) - w * 22 / 12;
+    const btn = Math.round(Math.max(64, Math.min(88, cur + spare)));
+    if (btn !== cur) {
+      document.documentElement.style.setProperty('--btn-h', btn + 'px');
+      if (again) sizeField(false);
+    }
   }
-  addEventListener('resize', sizeField);
+  addEventListener('resize', () => requestAnimationFrame(sizeField));
+  addEventListener('orientationchange', () => setTimeout(sizeField, 350));
   sizeField();
 
   app.bindHold($('bL'), app.act.left);
