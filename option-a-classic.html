@@ -11,7 +11,7 @@
 <title>BlocksNet — A: Classic</title>
 <link rel="stylesheet" href="css/common.css">
 <style>
-  /* Option A — "Classic Portrait": the original TetriNET window squeezed onto a phone.
+  /* Option A — "Classic Portrait": the classic desktop multiplayer window squeezed onto a phone.
      Big own field on the left, the 5 opponents in a numbered column on the right,
      special bar + attacks/defense log below, physical-style button pad at the bottom. */
   body {
@@ -133,7 +133,7 @@
       box.appendChild(el);
       return { p, el, canvas: el.querySelector('canvas') };
     });
-    // Target buttons 1-6 (+ D for discard), like the number keys in the original.
+    // Target buttons 1-6 (+ D for discard), mirroring the number-key targeting.
     const t = $('targets');
     t.innerHTML = '';
     app.room.players.forEach(p => {
@@ -164,7 +164,7 @@
 
   const app = BN.app({
     title: 'Option A · Classic Portrait',
-    subtitle: 'Faithful to the 1997 layout. Buttons for moves, number buttons 1–6 fire your first special at that player, D discards it. Tap an opponent field to target it too.',
+    subtitle: 'Classic desktop-style layout. Buttons for moves, number buttons 1–6 fire your first special at that player, D discards it. Tap an opponent field to target it too.',
     onSetup: buildOpps,
     render(app) {
       const me = app.me;

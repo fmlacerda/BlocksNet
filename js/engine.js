@@ -1,7 +1,7 @@
 /*
- * BlocksNet game engine (study prototype inspired by TetriNET).
+ * BlocksNet game engine (study prototype).
  *
- * Rules modelled on the original TetriNET (St0rmCat, 1997):
+ * Rules:
  *  - 12x22 playfield, up to 6 players, free-for-all or teams.
  *  - "Classic" line sending: 2 lines -> 1, 3 lines -> 2, 4 lines -> 4 to every opponent.
  *  - Clearing lines drops special blocks onto your own field; clearing a line that
@@ -18,7 +18,7 @@
   const H = 22;
   const MAX_INV = 18;
 
-  // Original TetriNET block palette: blue, yellow, green, purple, red.
+  // Block palette: blue, yellow, green, purple, red.
   const COLORS = [null, '#2f5bff', '#f2cf1d', '#27c24c', '#a63de0', '#e3343c'];
 
   const SPECIAL_INFO = {
@@ -32,7 +32,7 @@
     q: { name: 'Blockquake', hostile: true, color: '#ffd84d', desc: 'Shakes every row of the target field sideways.' },
     o: { name: 'Block Bomb', hostile: true, color: '#ff3b3b', desc: 'Every "o" on the target field explodes, scattering blocks.' },
   };
-  // Default TetriNET special frequencies (percent).
+  // Special frequencies (percent).
   const SPECIAL_FREQ = { a: 32, c: 18, n: 1, r: 11, s: 3, b: 14, g: 6, q: 6, o: 9 };
 
   const SHAPES = {
@@ -219,7 +219,7 @@
       if (!this.alive) return;
       this.alive = false;
       this.piece = null;
-      // TetriNET fills a dead player's field with random garbage.
+      // A dead player's field is filled with random garbage.
       for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) this.field[y][x] = 1 + rand(5);
       this.room.onDeath(this);
     }
@@ -314,7 +314,7 @@
       }
     }
 
-    // TetriNET keeps the top 6 rows free after a field switch.
+    // Keep the top 6 rows free after a field switch.
     makeHeadroom() {
       // A received field taller than 16 rows is shifted down (bottom rows drop off).
       while (this.field.slice(0, 6).some(r => r.some(v => v))) {
