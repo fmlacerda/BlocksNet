@@ -249,6 +249,7 @@
 
     // Host: build the player list (humans first, then bots to fill) and start everyone.
     startGame(settings, botCount, botSkill) {
+      if (!this.isHost) return;
       const players = [{ slot: 1, name: this.name, owner: 'host' }];
       for (const [id, g] of this.guests) players.push({ slot: players.length + 1, name: g.name, owner: id });
       const names = ['Blockhead', 'LineLord', 'Nukem', 'Gravitas', 'QuakeBot', 'Specialist', 'T-Spin'].sort(() => Math.random() - 0.5);

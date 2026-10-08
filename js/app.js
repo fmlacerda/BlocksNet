@@ -249,6 +249,7 @@
     }
 
     function hostStart() {
+      if (!session || !session.isHost) return;   // only the host can start a game
       const { skill, game } = readSettings();
       session.startGame(game, +$('bn-fill').value, SKILLS[skill]);
     }
