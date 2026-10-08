@@ -24,7 +24,7 @@ On iOS use *Share → Add to Home Screen*, and on Linux phones use *Install / Ad
 Portrait, one hand-held layout:
 
 - **Top line:** game name, lines, level, a sound on/off button and the partyline chat button (a dot means unread messages).
-- **Your field** on the left, sized to the largest the screen allows. Under it are your specials (the first one is used next) and the attack log.
+- **Your field** on the left, sized to the largest the screen allows. Under it are your specials (the first one is used next) and a 3-line action ticker: new events slide in at the bottom, older ones move up and fade, and each disappears after about 7 seconds. Tap the ticker for the full history.
 - **The 3 opponents** stacked on the right, with the next piece above them. Tap an opponent to fire your special at them.
 - **Buttons:** 1–4 fire your first special at that player and D discards it. Below are ◀ ▼ ▶ to move and soft-drop, ⟳ to rotate (one direction only) and ⤓ to hard-drop.
 

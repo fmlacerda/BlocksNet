@@ -50,7 +50,16 @@
   .specials .lbl b { color: var(--accent); }
   .specials canvas { height: 16px; }
 
-  .log { flex: 1 1 30px; min-height: 30px; padding: 2px 6px; overflow: hidden; font: 11px/14px ui-monospace, Menlo, monospace; background: #07090d; border: 1px solid var(--line); border-radius: 6px; display: flex; flex-direction: column; justify-content: flex-end; }
+  /* Action ticker: the last 3 events, newest at the bottom. Lines slide up and fade as
+     newer ones arrive, and fade away on their own after a few seconds. Tap for history. */
+  .log { --lh: 16px; position: relative; flex: 0 0 auto; height: calc(var(--lh) * 3 + 8px); overflow: hidden; background: #07090d; border: 1px solid var(--line); border-radius: 6px; touch-action: manipulation; }
+  .log .ln {
+    position: absolute; left: 7px; right: 7px; bottom: 4px; height: var(--lh);
+    font: 600 12px/var(--lh) ui-monospace, Menlo, monospace;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    transition: transform .45s ease-out, opacity .6s ease-out;
+    will-change: transform, opacity;
+  }
 
   .pad { flex: none; display: flex; flex-direction: column; gap: 6px; padding: 4px 6px 6px; }
   .pad .row { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 6px; }
@@ -157,13 +166,46 @@
     t.appendChild(d);
   }
 
+  // ---- 3-line ticker
+  const TICK_MAX = 3, TICK_LIFE = 7000, TICK_OPACITY = [1, 0.7, 0.45];
+  const ticker = [];   // newest first
+  const lineH = () => parseFloat(getComputedStyle($('log')).getPropertyValue('--lh')) || 16;
+  function placeTicker() {
+    const h = lineH();
+    ticker.slice().forEach((el, i) => {
+      if (i >= TICK_MAX) { retire(el); return; }
+      el.style.transform = `translateY(${-i * h}px)`;
+      el.style.opacity = TICK_OPACITY[i];
+    });
+  }
+  function retire(el) {
+    const i = ticker.indexOf(el);
+    if (i < 0) return;
+    ticker.splice(i, 1);
+    clearTimeout(el._t);
+    el.style.transform = `translateY(${-(i + 0.6) * lineH()}px)`;
+    el.style.opacity = 0;
+    setTimeout(() => el.remove(), 650);
+    placeTicker();
+  }
+  function tick(e) {
+    const el = document.createElement('div');
+    el.className = `ln log-line log-${e.kind}`;
+    el.textContent = e.text;
+    el.style.transform = `translateY(${lineH()}px)`;
+    el.style.opacity = 0;
+    $('log').appendChild(el);
+    void el.offsetWidth;            // start the slide-in from below
+    ticker.unshift(el);
+    el._t = setTimeout(() => retire(el), TICK_LIFE);
+    placeTicker();
+  }
+
   function addLog(e) {
     logLines.push(e);
     if (logLines.length > 200) logLines.shift();
     const div = `<div class="log-line log-${e.kind}">${e.text.replace(/</g, '&lt;')}</div>`;
-    const log = $('log');
-    log.insertAdjacentHTML('beforeend', div);
-    while (log.children.length > 12) log.firstChild.remove();
+    tick(e);
     const pl = $('partyLines');
     pl.insertAdjacentHTML('beforeend', div);
     pl.scrollTop = pl.scrollHeight;
@@ -196,7 +238,7 @@
   // special bar and a 2-line log, but leaving at least ~24% of the width for opponents.
   function sizeField() {
     const main = document.querySelector('.main').getBoundingClientRect();
-    const reserved = document.querySelector('.specials').getBoundingClientRect().height + 30 + 8 + 8;
+    const reserved = document.querySelector('.specials').getBoundingClientRect().height + $('log').getBoundingClientRect().height + 8 + 4;
     const byHeight = (main.height - reserved) * 12 / 22;
     const w = Math.max(main.width * 0.6, Math.min(main.width * 0.76, byHeight));
     document.querySelector('.left').style.flexBasis = Math.floor(w) + 'px';
@@ -213,6 +255,7 @@
   const showMute = () => { $('muteBtn').innerHTML = BN.sound.muted ? '&#128263;' : '&#128264;'; $('muteBtn').setAttribute('aria-pressed', BN.sound.muted); };
   $('muteBtn').addEventListener('click', () => { BN.sound.setMuted(!BN.sound.muted); showMute(); BN.sound.play('rotate'); });
   showMute();
+  $('log').addEventListener('click', () => $('partyBtn').click());
   $('partyBtn').addEventListener('click', () => { $('party').classList.add('open'); $('partyBtn').classList.remove('unread'); });
   $('partyClose').addEventListener('click', () => $('party').classList.remove('open'));
   $('chatForm').addEventListener('submit', e => { e.preventDefault(); app.act.say($('chatIn').value); $('chatIn').value = ''; });
