@@ -65,9 +65,10 @@ index.html     the game page: layout and button wiring
 
 Up to 4 players on their own phones, with bots filling any empty slots.
 
-1. One player taps **Host a room**. A 5-character room code appears.
-2. Friends tap **Join a room** and enter the code, or open the invite link from **Share invite link** (`…?join=CODE`).
-3. The host picks how many bots to add and taps **Start game**. The host's speed settings apply to everyone.
+1. One player taps **Host a room**. The **Partyline** chat room opens with a 5-character room code.
+2. Friends tap **Join a room** and enter the code, or open the invite link from **Invite** (`…?join=CODE`). They arrive in the same chat room ("Bob joined the room").
+3. Everyone can chat there. When ready, the host picks how many bots to add and taps **Start game**. Only the host can start; the host's speed settings apply to everyone.
+4. After each game, everyone returns to the Partyline with the winner announced, and the host starts the next round from there.
 
 **How it works.** Phones talk directly to each other over WebRTC, using PeerJS (bundled in `js/vendor/`, MIT licence). The free PeerJS cloud server only introduces the phones; no game data goes through it, and nothing needs hosting besides these static files.
 - **Each phone runs its own field.** The phone sends its field about 10 times a second, plus every line attack, special and chat message.

@@ -199,6 +199,9 @@
         this.guests.set(conn.id, { conn, name: cleanName(m.name) });
         conn.send({ t: 'welcome', id: conn.id, code: this.code });
         this.broadcastLobby();
+        const joined = { t: 'chat', system: true, text: `${cleanName(m.name)} joined the room` };
+        this.emit('chat', joined);
+        this.toGuests(joined);
         return;
       }
       if (!g) return;

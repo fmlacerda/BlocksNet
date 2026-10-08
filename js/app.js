@@ -95,21 +95,28 @@
         </div>
       </div>
       <div class="bn-overlay hidden" id="bn-online">
-        <div class="bn-panel">
-          <div class="bn-logo">Blocks<span>Net</span></div>
+        <div class="bn-panel" id="bn-on-panel">
+          <div class="bn-logo bn-on-logo">Blocks<span>Net</span></div>
           <div class="bn-sub" id="bn-on-title">Online room</div>
           <div id="bn-on-join" class="bn-stack hidden">
             <label>Your nickname<input id="bn-join-name" maxlength="12" autocomplete="off"></label>
             <label>Room code<input id="bn-code" maxlength="5" autocapitalize="characters" autocomplete="off" spellcheck="false" placeholder="ABCDE"></label>
             <button class="bn-btn-primary" id="bn-join">Join</button>
           </div>
-          <div id="bn-on-room" class="bn-stack hidden">
-            <div class="bn-code-box"><small>Room code</small><b id="bn-code-show">·····</b></div>
-            <button class="bn-btn-secondary" id="bn-share">Share invite link</button>
+          <div id="bn-on-room" class="bn-room hidden">
+            <div class="bn-room-head">
+              <div class="bn-code-box"><small>Room code</small><b id="bn-code-show">·····</b></div>
+              <button class="bn-btn-secondary" id="bn-share" type="button">Invite</button>
+            </div>
             <ol class="bn-plist" id="bn-plist"></ol>
-            <div id="bn-host-ctl" class="bn-stack">
-              <label>Fill empty slots with bots<select id="bn-fill">${[0, 1, 2, 3].map(n => `<option ${n === 0 ? 'selected' : ''}>${n}</option>`).join('')}</select></label>
-              <button class="bn-btn-primary" id="bn-on-start">Start game</button>
+            <div class="bn-chat" id="bn-chat" aria-live="polite"></div>
+            <form class="bn-chat-form" id="bn-chat-form">
+              <input id="bn-chat-in" maxlength="200" autocomplete="off" enterkeyhint="send" placeholder="Say something…">
+              <button type="submit">Send</button>
+            </form>
+            <div id="bn-host-ctl" class="bn-host-row">
+              <label>Bots<select id="bn-fill">${[0, 1, 2, 3].map(n => `<option ${n === 0 ? 'selected' : ''}>${n}</option>`).join('')}</select></label>
+              <button class="bn-btn-primary" id="bn-on-start" type="button">Start game</button>
             </div>
             <p class="bn-hint" id="bn-wait">Waiting for the host to start the game…</p>
           </div>
@@ -207,9 +214,11 @@
       show('bn-lobby', false); show('bn-end', false); show('bn-online', true);
       show('bn-on-join', mode === 'join');
       show('bn-on-room', mode !== 'join');
+      $('bn-on-panel').classList.toggle('bn-panel-room', mode !== 'join');
       show('bn-host-ctl', mode === 'host');
       show('bn-wait', mode === 'guest');
-      $('bn-on-title').textContent = mode === 'host' ? 'Your room' : mode === 'guest' ? 'Joined room' : 'Join a room';
+      $('bn-on-title').textContent = mode === 'join' ? 'Join a room' : 'Partyline';
+      if (mode !== 'join') setTimeout(() => { const c = $('bn-chat'); c.scrollTop = c.scrollHeight; }, 0);
     }
 
     function leaveOnline(message) {
@@ -222,13 +231,29 @@
       setup();
     }
 
+    // Room chat (the partyline before and between games).
+    function roomChat(text, kind = 'chat') {
+      const c = $('bn-chat');
+      const atBottom = c.scrollHeight - c.scrollTop - c.clientHeight < 40;
+      const div = document.createElement('div');
+      div.className = 'log-line log-' + kind;
+      div.textContent = text;
+      c.appendChild(div);
+      while (c.children.length > 200) c.firstChild.remove();
+      if (atBottom || kind !== 'chat') c.scrollTop = c.scrollHeight;
+    }
+
     function newSession() {
+      $('bn-chat').innerHTML = '';
       if (session) session.close();
       const s = session = new BN.net.Session();
       s.on('status', t => status(t));
       s.on('error', t => { status(t, true); if (!s.isHost && !s.conn) { s.close(); session = null; } });
       s.on('closed', t => { if (session === s) { leaveOnline(); $('bn-lobby-msg').textContent = t; } });
-      s.on('ready', code => { $('bn-code-show').textContent = code; });
+      s.on('ready', code => {
+        $('bn-code-show').textContent = code;
+        roomChat(`Room ${code} is open. Tap Invite to send the link, chat here, then start the game.`, 'system');
+      });
       s.on('lobby', l => {
         if (!s.isHost && $('bn-on-join') && !$('bn-on-join').classList.contains('hidden')) openOnline('guest');
         $('bn-code-show').textContent = l.code || s.code;
@@ -254,7 +279,11 @@
         start();
       });
       s.on('game', m => room.receive(m));
-      s.on('chat', c => room.log(c.system ? c.text : `<${c.name}> ${c.text}`, c.system ? 'system' : 'chat'));
+      s.on('chat', c => {
+        const text = c.system ? c.text : `<${c.name}> ${c.text}`;
+        room.log(text, c.system ? 'system' : 'chat');
+        roomChat(text, c.system ? 'system' : 'chat');
+      });
       return s;
     }
 
@@ -287,6 +316,11 @@
       $('bn-code').addEventListener('input', e => { e.target.value = BN.net.cleanCode(e.target.value); });
       $('bn-code').addEventListener('keydown', e => { if (e.key === 'Enter') $('bn-join').click(); });
       $('bn-on-start').addEventListener('click', hostStart);
+      $('bn-chat-form').addEventListener('submit', e => {
+        e.preventDefault();
+        if (session) session.chat($('bn-chat-in').value);
+        $('bn-chat-in').value = '';
+      });
       $('bn-leave').addEventListener('click', () => leaveOnline());
       $('bn-share').addEventListener('click', async () => {
         if (!session) return;
@@ -310,6 +344,12 @@
       store.set('winlist', wins);
       const youWon = winner === app.me;
       if (youWon) haptic([30, 40, 30, 40, 80]);
+      if (session) {
+        roomChat(winner ? `*** ${winner.name} wins! ***` : '*** Game over ***', 'system');
+        if (!session.isHost) roomChat('Waiting for the host to start the next game…', 'info');
+        setTimeout(() => { if (session && !room.running) openOnline(session.isHost ? 'host' : 'guest'); }, 1500);
+        return;
+      }
       const guest = !!(session && !session.isHost);
       show('bn-again', !guest);
       show('bn-end-wait', guest);
