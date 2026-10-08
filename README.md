@@ -41,7 +41,7 @@ lock palette with bevelled blocks.
 
 ## Sound
 
-Short retro sound effects are generated in the browser (Web Audio), so there are no audio files and no music. They play when you move, rotate, soft-drop, land or hard-drop a piece, clear lines (1–4 rising notes), collect a special, fire one, get hit by an attack or lines, receive a helpful special, get chat, get eliminated and win. Only your own actions and attacks aimed at you make sound. The 🔈 button in the top line mutes it, and the setting is remembered. On iPhone the silent switch also mutes the game.
+Short retro sound effects are generated in the browser (Web Audio), so there are no audio files and no music. They play when you move, rotate, soft-drop, land or hard-drop a piece, clear lines (1–4 rising notes), collect a special, fire one, get hit by an attack or lines, receive a helpful special, get chat, get eliminated and win. Only your own actions and attacks aimed at you make sound. The 🔈 button in the top line mutes it, and the setting is remembered. On iPhone the game plays even when the silent switch is on, like a video would (use the 🔈 button instead). If you hear nothing, tap **Test sound** in the lobby: it plays three notes and shows the audio status (e.g. `audio running · game sound on`).
 
 ## Fullscreen
 

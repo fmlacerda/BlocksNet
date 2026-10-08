@@ -84,6 +84,7 @@
             <label>Level up<select id="bn-lpl">${opt(LINES_PER_LEVEL, s.linesPerLevel, n => `${n} line${n > 1 ? 's' : ''}`)}</select></label>
           </div>
           ${fsRow}
+          <div class="bn-sound-test"><button class="bn-btn-ghost" id="bn-test-sound" type="button">&#128266; Test sound</button><span id="bn-sound-status"></span></div>
           <p class="bn-status error" id="bn-lobby-msg"></p>
           <button class="bn-btn-primary" id="bn-start">Play vs bots</button>
           ${BN.net ? `<div class="bn-divider"><span>or play online with friends</span></div>
@@ -173,6 +174,15 @@
     }
 
     $('bn-start').addEventListener('click', () => { setup(); start(); });
+    if (BN.sound) {
+      // Plays a short beep (even if game sound is muted) and shows the audio status,
+      // so a player can tell whether the phone is blocking sound.
+      $('bn-test-sound').addEventListener('click', () => {
+        BN.sound.unlock();
+        $('bn-sound-status').textContent = 'starting…';
+        setTimeout(() => { BN.sound.play('test', null, true); $('bn-sound-status').textContent = BN.sound.status(); }, 250);
+      });
+    } else $('bn-test-sound').parentElement.remove();
     $('bn-again').addEventListener('click', () => { if (session && session.isHost) hostStart(); else if (!session) start(); });
     $('bn-lobby-btn').addEventListener('click', () => {
       $('bn-end').classList.add('hidden');

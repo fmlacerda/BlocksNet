@@ -1,7 +1,12 @@
 /*
  * Sound effects, synthesised with the Web Audio API (no audio files, no music).
  * Browsers only allow audio after a tap, so the context is created/resumed on the
- * first touch or key press. iPhones in silent mode stay silent, as expected.
+ * first touch or key press.
+ *
+ * iPhone: Web Audio is normally silenced by the ring/silent switch. We ask for the
+ * "playback" audio session (Safari 17+), and on older iOS loop a silent <audio> element,
+ * which has the same effect. Either way the game is audible like a video would be; use
+ * the in-game mute button to silence it.
  */
 (function (BN) {
   'use strict';
@@ -10,16 +15,28 @@
   let master = null;
   let noiseBuf = null;
   let muted = false;
+  let htmlAudio = null;
+  const VOL = 2.5;   // overall loudness; a compressor below keeps peaks from distorting
+  const isIOS = /iP(hone|od|ad)/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  const SILENT_WAV = 'data:audio/wav;base64,UklGRsQPAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YaAPAACAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICA';
   try { muted = localStorage.getItem('bn.muted') === '1'; } catch (e) { /* storage unavailable */ }
 
   function init() {
     if (ctx) return ctx;
     const AC = window.AudioContext || window.webkitAudioContext;
     if (!AC) return null;
+    try { if (navigator.audioSession) navigator.audioSession.type = 'playback'; } catch (e) { /* not supported */ }
     ctx = new AC();
+    const comp = ctx.createDynamicsCompressor();
+    comp.threshold.value = -10;
+    comp.knee.value = 6;
+    comp.ratio.value = 8;
+    comp.attack.value = 0.002;
+    comp.release.value = 0.1;
+    comp.connect(ctx.destination);
     master = ctx.createGain();
-    master.gain.value = 0.5;
-    master.connect(ctx.destination);
+    master.gain.value = 0.9;
+    master.connect(comp);
     noiseBuf = ctx.createBuffer(1, ctx.sampleRate * 0.5, ctx.sampleRate);
     const d = noiseBuf.getChannelData(0);
     for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
@@ -32,6 +49,17 @@
   // one-sample buffer is played each time the context is (re)started.
   function unlock() {
     if (!init()) return;
+    // Older iOS: a playing <audio> element switches the page to the media audio session,
+    // so the silent switch no longer mutes Web Audio.
+    if (isIOS && !navigator.audioSession && !htmlAudio) {
+      try {
+        htmlAudio = new Audio(SILENT_WAV);
+        htmlAudio.loop = true;
+        htmlAudio.setAttribute('playsinline', '');
+        const pr = htmlAudio.play();
+        if (pr && pr.catch) pr.catch(() => { htmlAudio = null; });
+      } catch (e) { htmlAudio = null; }
+    }
     if (ctx.state !== 'running') {
       try {
         const src = ctx.createBufferSource();
@@ -55,7 +83,7 @@
     o.frequency.setValueAtTime(f, now);
     if (f2) o.frequency.exponentialRampToValueAtTime(f2, now + dur);
     g.gain.setValueAtTime(0.0001, now);
-    g.gain.exponentialRampToValueAtTime(vol, now + 0.005);
+    g.gain.exponentialRampToValueAtTime(Math.min(1, vol * VOL), now + 0.005);
     g.gain.exponentialRampToValueAtTime(0.0001, now + dur);
     o.connect(g).connect(master);
     o.start(now);
@@ -72,7 +100,7 @@
     flt.frequency.value = freq;
     flt.Q.value = q;
     const g = ctx.createGain();
-    g.gain.setValueAtTime(vol, now);
+    g.gain.setValueAtTime(Math.min(1, vol * VOL), now);
     g.gain.exponentialRampToValueAtTime(0.0001, now + dur);
     src.connect(flt).connect(g).connect(master);
     src.start(now);
@@ -97,11 +125,12 @@
     chat:   () => tone({ type: 'sine', f: 880, dur: 0.09, vol: 0.08 }),
     dead:   () => [392, 330, 262, 196].forEach((f, i) => tone({ type: 'square', f, t: i * 0.13, dur: 0.16, vol: 0.12 })),
     win:    () => [523, 659, 784, 1047, 784, 1047].forEach((f, i) => tone({ type: 'square', f, t: i * 0.1, dur: i === 5 ? 0.35 : 0.12, vol: 0.12 })),
+    test:   () => [523, 659, 784].forEach((f, i) => tone({ type: 'square', f, t: i * 0.12, dur: 0.14, vol: 0.2 })),
     start:  () => { tone({ type: 'square', f: 392, dur: 0.1, vol: 0.1 }); tone({ type: 'square', f: 784, t: 0.12, dur: 0.15, vol: 0.12 }); },
   };
 
-  function play(name, arg) {
-    if (muted || !SFX[name] || !init() || ctx.state !== 'running') return;
+  function play(name, arg, force = false) {
+    if ((muted && !force) || !SFX[name] || !init() || ctx.state !== 'running') return;
     try { SFX[name](arg); } catch (e) { /* never let audio break the game */ }
   }
 
@@ -110,5 +139,16 @@
     try { localStorage.setItem('bn.muted', muted ? '1' : '0'); } catch (e) { /* storage unavailable */ }
   }
 
-  BN.sound = { play, unlock, setMuted, get muted() { return muted; }, _ctx: () => ctx };
+  // For the lobby's "Test sound" button: what the phone's audio is doing.
+  function status() {
+    const parts = [];
+    if (!(window.AudioContext || window.webkitAudioContext)) return 'This browser has no Web Audio support.';
+    parts.push('audio ' + (ctx ? ctx.state : 'not started'));
+    if (navigator.audioSession) parts.push('session ' + navigator.audioSession.type);
+    else if (isIOS) parts.push('silent-switch bypass ' + (htmlAudio && !htmlAudio.paused ? 'on' : 'off'));
+    parts.push(muted ? 'game sound OFF' : 'game sound on');
+    return parts.join(' · ');
+  }
+
+  BN.sound = { play, unlock, setMuted, status, get muted() { return muted; }, _ctx: () => ctx };
 })(window.BN);
