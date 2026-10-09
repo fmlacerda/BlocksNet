@@ -79,7 +79,7 @@ These rooms run on a small server, `server/worker.js` (a Cloudflare Worker with 
 - The server checks that each phone only sends messages for its own players, and it decides when a game ends and who won.
 - Results go into the ranking (SQLite in the Durable Object). Only games with at least 2 real players count. Players are identified by nickname plus a random id stored on the phone.
 
-**Deploying:** in Cloudflare, *Workers & Pages → Create → Import a repository →* this repo, and name the Worker `blocksnet`. Cloudflare then redeploys on every push. Put the Worker's address (e.g. `https://blocksnet.<your-subdomain>.workers.dev`) in `js/config.js` as `server`. The Multiplayer button only appears once that is set. To test locally, run `npx wrangler dev` and open the game with `?server=http://127.0.0.1:8787`.
+**Deploying:** in Cloudflare, *Workers & Pages → Create → Import a repository →* this repo, and name the Worker `blocksnet`. Cloudflare then redeploys on every push. The live server is `https://blocksnet.fmlacerda.workers.dev`, set in `js/config.js` as `server`. The Multiplayer button only appears once that is set. To test locally, run `npx wrangler dev` and open the game with `?server=http://127.0.0.1:8787`.
 
 ## Online multiplayer (private rooms, phone-to-phone)
 

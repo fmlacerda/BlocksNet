@@ -14,4 +14,4 @@
  */
 // Address of the BlocksNet server for public rooms and the ranking (server/worker.js),
 // e.g. 'https://blocksnet.<your-subdomain>.workers.dev'. Empty = no Multiplayer button.
-window.BN_CONFIG = window.BN_CONFIG || { server: '', turn: [] };
+window.BN_CONFIG = window.BN_CONFIG || { server: 'https://blocksnet.fmlacerda.workers.dev', turn: [] };
