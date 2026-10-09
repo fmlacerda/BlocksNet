@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#0b0d12">
+<title>BlocksNet Rooms (mockup)</title>
+<link rel="icon" href="icon.svg">
+<link rel="stylesheet" href="css/common.css">
+<style>
+  /* MOCKUP ONLY: the planned "Multiplayer" screen with made-up data, to choose a layout
+     before the server is built. Nothing here is connected. */
+  html, body { overflow: auto; height: auto; -webkit-user-select: auto; user-select: auto; }
+  body { padding: calc(10px + var(--safe-t)) 10px calc(16px + var(--safe-b)); background: #0b0d12 radial-gradient(120% 50% at 50% 0%, #17203a, transparent 70%); min-height: 100dvh; }
+  .top { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+  .top .logo { font: 900 18px "Arial Black", Impact, sans-serif; letter-spacing: -.3px; }
+  .top .logo span { color: var(--red); }
+  .top h1 { flex: 1; font-size: 13px; color: var(--accent); text-transform: uppercase; letter-spacing: .12em; text-align: right; }
+  .me { font-size: 12px; color: var(--dim); margin-bottom: 8px; display: flex; justify-content: space-between; align-items: center; }
+  .me b { color: var(--text); }
+  .seg { display: flex; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 3px; gap: 3px; margin-bottom: 10px; }
+  .seg button { flex: 1; padding: 7px 4px; border-radius: 8px; font-size: 12px; font-weight: 700; color: var(--dim); touch-action: manipulation; }
+  .seg button.on { background: var(--accent); color: #111; }
+  .note { font-size: 11px; color: var(--dim); text-align: center; margin: 8px 0 0; }
+
+  h2 { font-size: 11px; color: var(--dim); text-transform: uppercase; letter-spacing: .12em; margin: 0 0 6px; }
+
+  /* Room card */
+  .room { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 8px 9px; display: flex; flex-direction: column; gap: 6px; touch-action: manipulation; }
+  .room .head { display: flex; align-items: baseline; gap: 6px; }
+  .room .name { font-weight: 800; font-size: 14px; }
+  .room .state { margin-left: auto; font-size: 10px; font-weight: 700; padding: 2px 6px; border-radius: 999px; white-space: nowrap; }
+  .st-empty { background: #20283a; color: var(--dim); }
+  .st-wait { background: #183a24; color: #7dff8a; }
+  .st-play { background: #3a1820; color: #ff8a8a; }
+  .seats { display: flex; gap: 4px; }
+  .seat { flex: 1; height: 22px; border-radius: 6px; background: #0e1219; border: 1px dashed #2a3142; font-size: 10px; display: flex; align-items: center; justify-content: center; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; padding: 0 3px; color: var(--dim); }
+  .seat.p { border-style: solid; color: var(--text); font-weight: 700; }
+  .seat.p1 { background: #1a2a6a; border-color: #2f5bff; }
+  .seat.p2 { background: #4a3c08; border-color: #f2cf1d; }
+  .seat.p3 { background: #0f3d1d; border-color: #27c24c; }
+  .seat.p4 { background: #3b1652; border-color: #a63de0; }
+  .room .join { background: var(--accent); color: #111; font-weight: 800; font-size: 13px; padding: 8px; border-radius: 9px; }
+  .room .join:disabled { background: #2a3142; color: var(--dim); }
+
+  /* Ranking */
+  .rank { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 8px; }
+  .rank ol { list-style: none; display: flex; flex-direction: column; gap: 3px; }
+  .rank li { display: grid; grid-template-columns: 22px 1fr auto; gap: 6px; align-items: center; font-size: 12px; padding: 5px 6px; border-radius: 7px; background: #11151e; }
+  .rank li .n { font-weight: 800; color: var(--dim); text-align: center; }
+  .rank li:nth-child(1) .n { color: #ffd84d; } .rank li:nth-child(2) .n { color: #d6dcff; } .rank li:nth-child(3) .n { color: #e0a060; }
+  .rank li .who { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 700; }
+  .rank li .w { font: 700 12px ui-monospace, Menlo, monospace; color: var(--accent); text-align: right; }
+  .rank li .w small { display: block; font-size: 9px; color: var(--dim); font-weight: 600; }
+  .rank li.you { outline: 1px solid var(--accent); background: #2a2410; }
+  .rank .sep { text-align: center; color: var(--dim); font-size: 11px; background: none; display: block; padding: 0; }
+  .rank .period { display: flex; gap: 4px; margin-bottom: 6px; }
+  .rank .period button { flex: 1; font-size: 10px; font-weight: 700; padding: 4px; border-radius: 6px; color: var(--dim); background: #11151e; }
+  .rank .period button.on { color: #111; background: var(--accent); }
+
+  /* Layout A: rooms left, ranking right */
+  .layA { display: grid; grid-template-columns: minmax(0, 1.45fr) minmax(0, 1fr); gap: 8px; align-items: start; }
+  .layA .rooms { display: flex; flex-direction: column; gap: 6px; }
+  .layA .room { padding: 7px 8px; gap: 5px; }
+  .layA .seat { height: 18px; font-size: 9px; }
+  .layA .room .join { padding: 6px; font-size: 12px; }
+  .layA .rank li { grid-template-columns: 16px 1fr auto; font-size: 11px; padding: 4px 5px; gap: 4px; }
+
+  /* Layout B: 2x3 room grid, ranking below */
+  .layB .rooms { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin-bottom: 12px; }
+
+  .private { margin-top: 12px; display: flex; gap: 8px; }
+  .private button { flex: 1; }
+  .hidden { display: none !important; }
+</style>
+</head>
+<body>
+  <div class="top"><div class="logo">Blocks<span>Net</span></div><h1>Multiplayer</h1></div>
+  <div class="me"><span>Playing as <b>Fernando</b> · rank #7 · 12 wins</span><a class="bn-back" href="index.html">&larr; back</a></div>
+
+  <div class="seg" role="tablist">
+    <button class="on" data-lay="A">Layout A · side by side</button>
+    <button data-lay="B">Layout B · ranking below</button>
+  </div>
+
+  <div id="layA" class="layA">
+    <div><h2>Rooms</h2><div class="rooms" data-rooms></div></div>
+    <div><h2>Top players</h2><div class="rank" data-rank></div></div>
+  </div>
+
+  <div id="layB" class="layB hidden">
+    <h2>Rooms</h2><div class="rooms" data-rooms></div>
+    <h2>Top players</h2><div class="rank" data-rank></div>
+  </div>
+
+  <div class="private">
+    <button class="bn-btn-secondary">Private room (code)</button>
+    <button class="bn-btn-secondary">Play vs bots</button>
+  </div>
+  <p class="note">Mockup with made-up data. Tap a room's Join to see the next step; nothing is connected yet.</p>
+
+<script>
+  // Made-up data shaped like what the server would send.
+  const ROOMS = [
+    { name: 'Room 1', state: 'wait', players: ['Bea', 'Cal'] },
+    { name: 'Room 2', state: 'play', players: ['Dee', 'Eve', 'Fox', 'Gus'] },
+    { name: 'Room 3', state: 'empty', players: [] },
+    { name: 'Room 4', state: 'wait', players: ['Hal'] },
+    { name: 'Room 5', state: 'play', players: ['Ivy', 'Jo', 'Kim'] },
+    { name: 'Room 6', state: 'empty', players: [] },
+  ];
+  const RANK = [
+    ['Nikita', 48, 70], ['Bea', 41, 66], ['Cal', 37, 71], ['Dee', 30, 52], ['Ivy', 26, 49],
+    ['Hal', 19, 40], ['Fernando', 12, 25], ['Jo', 11, 30], ['Eve', 9, 22], ['Fox', 7, 19],
+  ];
+  const STATE = { empty: ['Empty', 'st-empty'], wait: ['Waiting', 'st-wait'], play: ['Playing', 'st-play'] };
+
+  function roomHTML(r, i) {
+    const [label, cls] = STATE[r.state];
+    const full = r.players.length >= 4;
+    const seats = [0, 1, 2, 3].map(k => r.players[k]
+      ? `<div class="seat p p${k + 1}">${r.players[k]}</div>`
+      : `<div class="seat">open</div>`).join('');
+    const btn = r.state === 'play' ? `<button class="join" disabled>In game · ${r.players.length}/4</button>`
+      : full ? `<button class="join" disabled>Full</button>`
+      : `<button class="join" data-room="${i}">${r.players.length ? 'Join' : 'Open room'} · ${r.players.length}/4</button>`;
+    return `<div class="room"><div class="head"><span class="name">${r.name}</span><span class="state ${cls}">${label}</span></div><div class="seats">${seats}</div>${btn}</div>`;
+  }
+  function rankHTML() {
+    return `<div class="period"><button class="on">All time</button><button>This week</button></div><ol>` +
+      RANK.map(([n, w, g], i) => `<li class="${n === 'Fernando' ? 'you' : ''}"><span class="n">${i + 1}</span><span class="who">${n}</span><span class="w">${w}<small>${g} games</small></span></li>`).join('') + `</ol>`;
+  }
+  document.querySelectorAll('[data-rooms]').forEach(el => { el.innerHTML = ROOMS.map(roomHTML).join(''); });
+  document.querySelectorAll('[data-rank]').forEach(el => { el.innerHTML = rankHTML(); });
+
+  document.querySelectorAll('.seg button').forEach(b => b.addEventListener('click', () => {
+    document.querySelectorAll('.seg button').forEach(x => x.classList.toggle('on', x === b));
+    document.getElementById('layA').classList.toggle('hidden', b.dataset.lay !== 'A');
+    document.getElementById('layB').classList.toggle('hidden', b.dataset.lay !== 'B');
+  }));
+  document.addEventListener('click', e => {
+    const j = e.target.closest('.join[data-room]');
+    if (j) alert(`Next step: you enter ${ROOMS[j.dataset.room].name}'s Partyline chat. The first player in the room is its host and starts the game; up to 4 players, bots can fill empty seats.`);
+  });
+</script>
+</body>
+</html>
