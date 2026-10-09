@@ -109,6 +109,47 @@ button { font: inherit; color: inherit; border: 0; background: none; cursor: poi
 .bn-room-foot .bn-btn-ghost { flex: 1; font-size: 13px; }
 .bn-diag { flex: 1; min-height: 160px; overflow: auto; -webkit-overflow-scrolling: touch; background: #07090d; border: 1px solid var(--line); border-radius: 10px; padding: 8px; font: 11px/15px ui-monospace, Menlo, monospace; color: var(--text); white-space: pre-wrap; word-break: break-word; -webkit-user-select: text; user-select: text; }
 #bn-diag-sheet { z-index: 70; }
+.bn-mp-btn { width: 100%; font-size: 15px; padding: 13px 8px; border-color: var(--accent); color: var(--accent); }
+.bn-private-row .bn-btn-secondary { font-size: 13px; padding: 10px 6px; }
+.bn-mp-panel { max-width: 460px; gap: 8px; padding: 12px; }
+.bn-mp-top { display: flex; align-items: center; gap: 8px; }
+.bn-mp-top .bn-logo { font-size: 20px; text-shadow: none; text-align: left; }
+.bn-mp-top span { flex: 1; text-align: right; font-size: 12px; font-weight: 700; color: var(--accent); text-transform: uppercase; letter-spacing: .12em; }
+.bn-mp-me { font-size: 12px; color: var(--dim); }
+.bn-mp-me b { color: var(--text); }
+.bn-h2 { font-size: 11px; color: var(--dim); text-transform: uppercase; letter-spacing: .12em; margin-top: 4px; }
+.bn-rooms { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.bn-rcard { background: var(--panel-2); border: 1px solid var(--line); border-radius: 12px; padding: 8px; display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.bn-rcard .head { display: flex; align-items: baseline; gap: 6px; }
+.bn-rcard .name { font-weight: 800; font-size: 14px; }
+.bn-rcard .state { margin-left: auto; font-size: 10px; font-weight: 700; padding: 2px 6px; border-radius: 999px; white-space: nowrap; }
+.st-empty { background: #20283a; color: var(--dim); }
+.st-wait { background: #183a24; color: #7dff8a; }
+.st-play { background: #3a1820; color: #ff8a8a; }
+.bn-seats { display: flex; gap: 3px; }
+.bn-seat { flex: 1; min-width: 0; height: 20px; border-radius: 6px; background: #0e1219; border: 1px dashed #2a3142; font-size: 9px; display: flex; align-items: center; justify-content: center; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; padding: 0 2px; color: var(--dim); }
+.bn-seat.p { border-style: solid; color: var(--text); font-weight: 700; }
+.bn-seat.p1 { background: #1a2a6a; border-color: #2f5bff; }
+.bn-seat.p2 { background: #4a3c08; border-color: #f2cf1d; }
+.bn-seat.p3 { background: #0f3d1d; border-color: #27c24c; }
+.bn-seat.p4 { background: #3b1652; border-color: #a63de0; }
+.bn-join { background: var(--accent); color: #111; font-weight: 800; font-size: 13px; padding: 9px 4px; border-radius: 9px; touch-action: manipulation; }
+.bn-join:disabled { background: #2a3142; color: var(--dim); }
+.bn-rank { background: var(--panel-2); border: 1px solid var(--line); border-radius: 12px; padding: 8px; }
+.bn-period { display: flex; gap: 4px; margin-bottom: 6px; }
+.bn-period button { flex: 1; font-size: 11px; font-weight: 700; padding: 5px; border-radius: 6px; color: var(--dim); background: #11151e; touch-action: manipulation; }
+.bn-period button.on { color: #111; background: var(--accent); }
+.bn-rank ol { list-style: none; display: flex; flex-direction: column; gap: 3px; }
+.bn-rank li { display: grid; grid-template-columns: 22px 1fr auto; gap: 6px; align-items: center; font-size: 13px; padding: 5px 6px; border-radius: 7px; background: #11151e; }
+.bn-rank li.empty { display: block; color: var(--dim); font-size: 12px; text-align: center; padding: 10px; }
+.bn-rank li .n { font-weight: 800; color: var(--dim); text-align: center; }
+.bn-rank li:nth-child(1) .n { color: #ffd84d; } .bn-rank li:nth-child(2) .n { color: #d6dcff; } .bn-rank li:nth-child(3) .n { color: #e0a060; }
+.bn-rank li .who { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 700; }
+.bn-rank li .w { font: 700 13px ui-monospace, Menlo, monospace; color: var(--accent); text-align: right; }
+.bn-rank li .w small { display: block; font-size: 9px; color: var(--dim); font-weight: 600; }
+.bn-rank li.you { outline: 1px solid var(--accent); background: #2a2410; }
+.bn-rank-note { font-size: 10px; margin-top: 6px; }
+.bn-code-box b.bn-room-name { letter-spacing: .04em; }
 .bn-divider { display: flex; align-items: center; gap: 8px; color: var(--dim); font-size: 12px; }
 .bn-divider::before, .bn-divider::after { content: ""; flex: 1; height: 1px; background: var(--line); }
 .bn-stack { display: flex; flex-direction: column; gap: 10px; }

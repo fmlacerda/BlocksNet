@@ -1,0 +1,15 @@
+// Cloudflare deploy settings for the BlocksNet game server (server/worker.js).
+// Cloudflare "Workers & Pages → Import a repository" reads this file and deploys on every push.
+// The game itself is served by GitHub Pages; this only runs the online rooms and ranking.
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "blocksnet",
+  "main": "server/worker.js",
+  "compatibility_date": "2025-09-01",
+  "workers_dev": true,
+  "durable_objects": {
+    "bindings": [{ "name": "HUB", "class_name": "Hub" }]
+  },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["Hub"] }],
+  "observability": { "enabled": true }
+}

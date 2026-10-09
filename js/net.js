@@ -578,5 +578,185 @@
     }
   }
 
-  BN.net = { Session, transport: transport.name, cleanCode, cleanName, PROTO, diag: () => DIAG.join('\n'), note };
+  // ------------------------------------------------------------ public rooms (server)
+  /*
+   * Public rooms run on the BlocksNet server (server/worker.js) instead of phone-to-phone:
+   * every phone holds one WebSocket to the server, which relays messages, picks the host
+   * (first player in the room), and decides when a game ends. Same events as Session.
+   */
+  function serverURL() {
+    const u = params.get('server') || (window.BN_CONFIG && window.BN_CONFIG.server) || '';
+    return u.replace(/\/+$/, '');
+  }
+  function playerId() {
+    try {
+      let id = localStorage.getItem('bn.pid');
+      if (!id) { id = rid() + rid(); localStorage.setItem('bn.pid', id); }
+      return id;
+    } catch (e) { return rid() + rid(); }
+  }
+  async function fetchLobby() {
+    const base = serverURL();
+    if (!base) throw new Error('no server');
+    const r = await fetch(`${base}/lobby?pid=${encodeURIComponent(playerId())}&t=${Date.now()}`, { cache: 'no-store' });
+    if (!r.ok) throw new Error('server ' + r.status);
+    return r.json();
+  }
+
+  class ServerSession {
+    constructor() {
+      this.listeners = {};
+      this.isHost = false;
+      this.serverAuthority = true;   // the server announces the end of each game
+      this.public = true;
+      this.code = '';
+      this.conn = null;
+      this.myId = null;
+      this.closed = false;
+      this.reconnecting = null;
+      this.pid = playerId();
+    }
+    on(ev, fn) { (this.listeners[ev] = this.listeners[ev] || []).push(fn); return this; }
+    emit(ev, d) { (this.listeners[ev] || []).forEach(fn => fn(d)); }
+
+    joinRoom(n, name) {
+      this.room = n | 0;
+      this.code = `Room ${this.room}`;
+      this.name = cleanName(name);
+      note(`server: joining ${this.code} as ${this.name} (${serverURL()})`);
+      this.emit('status', `Joining ${this.code}…`);
+      this.connect();
+    }
+
+    connect() {
+      if (this.closed) return;
+      const base = serverURL().replace(/^http/, 'ws');
+      let ws;
+      try { ws = new WebSocket(`${base}/ws/room/${this.room}`); }
+      catch (e) { this.failed('Could not reach the BlocksNet server.'); return; }
+      const timer = setTimeout(() => { if (ws.readyState !== 1) { note('server: no answer within 12 s'); try { ws.close(); } catch (e) { /* ignore */ } ended_(0, 'timeout'); } }, 12000);
+      let opened = false, ended = false;
+      // Handle the end of this socket once, whether the browser reports it or we close it
+      // ourselves (some servers never answer the close, so don't wait for onclose).
+      const ended_ = (code, reason) => {
+        if (ended) return;
+        ended = true;
+        clearTimeout(timer);
+        ws.onopen = ws.onmessage = ws.onclose = null;
+        if (this.ws === ws) { this.ws = null; this.conn = null; }
+        note(`server: connection closed (${code}${reason ? ' ' + reason : ''})`);
+        if (this.closed) return;
+        if (!opened && !this.reconnecting) { this.failed("Couldn't reach the BlocksNet server. Check your internet connection and try again."); return; }
+        this.lost();
+      };
+      ws.onopen = () => {
+        opened = true; clearTimeout(timer);
+        note('server: connected');
+        this.ws = ws;
+        this.rx = Date.now();
+        this.conn = { send: m => { try { if (ws.readyState === 1) ws.send(JSON.stringify(m)); } catch (e) { /* closing */ } }, close: () => { try { ws.close(); } catch (e) { /* ignore */ } ended_(1000, 'closed by this device'); } };
+        this.conn.send({ t: 'hello', v: PROTO, name: this.name, pid: this.pid, ver: BN.VERSION });
+        this.startHeartbeat();
+      };
+      ws.onmessage = e => {
+        this.rx = Date.now();
+        let m; try { m = JSON.parse(e.data); } catch (err) { return; }
+        this.fromServer(m);
+      };
+      ws.onclose = ev => ended_(ev.code, ev.reason);
+    }
+
+    failed(text) { this.close(); this.emit('error', text); }
+
+    startHeartbeat() {
+      if (this.hb) return;
+      let last = Date.now();
+      this.hb = setInterval(() => {
+        const now = Date.now(), gap = now - last;
+        last = now;
+        if (gap > PING_MS * 2.5) { note(`this device was paused for about ${Math.round(gap / 1000)}s`); this.rx = now; }
+        if (!this.conn) return;
+        this.conn.send({ t: 'ping' });
+        if (now - this.rx > DEAD_MS) { note(`server: silent for ${DEAD_MS / 1000}s`); this.conn.close(); }
+      }, PING_MS);
+    }
+
+    lost() {
+      if (this.closed) return;
+      if (!this.welcomed) { this.close(); this.emit('closed', 'Lost connection to the server.'); return; }
+      if (!this.reconnecting) {
+        this.reconnecting = { until: Date.now() + RECONNECT_FOR_MS, tries: 0 };
+        note('server: connection lost; reconnecting');
+        this.emit('reconnecting');
+      }
+      const r = this.reconnecting;
+      if (Date.now() > r.until) { this.close(); this.emit('closed', "Lost connection to the server and couldn't reconnect."); return; }
+      r.tries++;
+      this.emit('status', `Connection lost – reconnecting (try ${r.tries})…`);
+      clearTimeout(this.retryT);
+      this.retryT = setTimeout(() => this.connect(), r.tries === 1 ? 500 : 2500);
+    }
+
+    fromServer(m) {
+      if (!m || typeof m !== 'object') return;
+      switch (m.t) {
+        case 'ping': break;
+        case 'welcome': {
+          this.myId = m.id;
+          this.isHost = !!m.host;
+          const first = !this.welcomed;
+          this.welcomed = true;
+          this.emit('status', '');
+          note(`server: in ${this.code}${this.isHost ? ' as host' : ''}`);
+          if (first) this.emit('ready', this.code);
+          if (this.reconnecting) { this.reconnecting = null; this.emit('reconnected'); }
+          this.emit('role', this.isHost);
+          break;
+        }
+        case 'role': this.isHost = !!m.host; note(`server: you are now ${this.isHost ? 'the host' : 'a guest'}`); this.emit('role', this.isHost); break;
+        case 'reject': note(`server: rejected – ${m.reason}`); this.failed(String(m.reason || 'Could not join.')); break;
+        case 'lobby': this.emit('lobby', { code: this.code, players: (m.players || []).map(p => ({ name: cleanName(p.name), host: !!p.host })) }); break;
+        case 'start':
+          note('server: game started');
+          this.emit('start', {
+            players: (m.players || []).map(p => ({ slot: p.slot | 0, name: cleanName(p.name), owner: String(p.owner), bot: !!p.bot, skill: +p.skill || 0.5 })),
+            settings: m.settings, me: this.myId,
+          });
+          break;
+        case 'chat': this.emit('chat', { name: m.system ? '' : cleanName(m.name), text: cleanText(m.text), system: !!m.system }); break;
+        default: this.emit('game', m);
+      }
+    }
+
+    // Host only: the server builds the player list and starts everyone.
+    startGame(settings, botCount, botSkill) {
+      if (!this.isHost || !this.conn) return;
+      this.conn.send({ t: 'start', settings, bots: botCount, skill: botSkill });
+    }
+    send(m) { if (this.conn) this.conn.send(m); }
+    chat(text) {
+      const t = cleanText(text).trim();
+      if (!t || !this.conn) return;
+      this.conn.send({ t: 'chat', text: t });
+      this.emit('chat', { name: this.name, text: t });
+    }
+    inviteLink() {
+      const u = new URL(location.href);
+      u.search = '';
+      u.searchParams.set('room', this.room);
+      if (params.get('server')) u.searchParams.set('server', params.get('server'));
+      return u.toString();
+    }
+    close() {
+      if (this.closed) return;
+      this.closed = true;
+      clearInterval(this.hb);
+      clearTimeout(this.retryT);
+      note('server: left the room');
+      if (this.ws) { try { this.ws.close(1000); } catch (e) { /* ignore */ } }
+      this.conn = null;
+    }
+  }
+
+  BN.net = { Session, ServerSession, fetchLobby, serverURL, playerId, transport: transport.name, cleanCode, cleanName, PROTO, diag: () => DIAG.join('\n'), note };
 })(window.BN);

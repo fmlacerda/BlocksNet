@@ -62,13 +62,26 @@ js/render.js   canvas drawing: fields, next piece, special bar
 js/sound.js    synthesised sound effects (Web Audio)
 js/net.js      online rooms: PeerJS / same-browser transports, host relay, room codes, invites
 js/app.js      shared shell: lobby, online room screens, game loop, keyboard, buttons, winlist, haptics
-js/config.js   optional extra TURN relays for online play
+js/config.js   server address for public rooms; optional extra TURN relays
+server/        game server for public rooms and ranking (Cloudflare Worker)
+wrangler.jsonc Cloudflare deploy settings
 js/vendor/     PeerJS 1.5.5 (MIT)
 css/common.css shared tokens, overlays, log colours
 index.html     the game page: layout and button wiring
 ```
 
-## Online multiplayer
+## Public rooms and ranking (server)
+
+The **Multiplayer** button opens six public rooms (Room 1–6, up to 4 players each) and the top-players ranking (all time and this week). Joining a room opens its Partyline chat; the first player in the room is the host and starts the game (bots can fill empty seats); if the host leaves, the next player becomes host.
+
+These rooms run on a small server, `server/worker.js` (a Cloudflare Worker with one Durable Object), configured by `wrangler.jsonc`:
+- Phones connect to it with a WebSocket and it relays the game messages, so no phone-to-phone connection is needed (works on any network).
+- The server checks that each phone only sends messages for its own players, and it decides when a game ends and who won.
+- Results go into the ranking (SQLite in the Durable Object). Only games with at least 2 real players count. Players are identified by nickname plus a random id stored on the phone.
+
+**Deploying:** in Cloudflare, *Workers & Pages → Create → Import a repository →* this repo, and name the Worker `blocksnet`. Cloudflare then redeploys on every push. Put the Worker's address (e.g. `https://blocksnet.<your-subdomain>.workers.dev`) in `js/config.js` as `server`. The Multiplayer button only appears once that is set. To test locally, run `npx wrangler dev` and open the game with `?server=http://127.0.0.1:8787`.
+
+## Online multiplayer (private rooms, phone-to-phone)
 
 Up to 4 players on their own phones, with bots filling any empty slots.
 

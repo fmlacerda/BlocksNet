@@ -87,12 +87,29 @@
           <div class="bn-sound-test"><button class="bn-btn-ghost" id="bn-test-sound" type="button">&#128266; Test sound</button><span id="bn-sound-status"></span></div>
           <p class="bn-status error" id="bn-lobby-msg"></p>
           <button class="bn-btn-primary" id="bn-start">Play vs bots</button>
-          ${BN.net ? `<div class="bn-divider"><span>or play online with friends</span></div>
-          <div class="bn-row">
-            <button class="bn-btn-secondary" id="bn-host">Host a room</button>
-            <button class="bn-btn-secondary" id="bn-join-open">Join a room</button>
+          ${BN.net ? `<div class="bn-divider"><span>or play online</span></div>
+          ${BN.net.serverURL() ? '<button class="bn-btn-secondary bn-mp-btn" id="bn-mp-open" type="button">Multiplayer · public rooms</button>' : ''}
+          <div class="bn-row bn-private-row">
+            <button class="bn-btn-secondary" id="bn-host">${BN.net.serverURL() ? 'Private room' : 'Host a room'}</button>
+            <button class="bn-btn-secondary" id="bn-join-open">${BN.net.serverURL() ? 'Join with code' : 'Join a room'}</button>
           </div>` : ''}
           <p class="bn-version">v${BN.VERSION}${BN.net ? ' · <button class="bn-linkbtn" id="bn-diag-open" type="button">connection details</button>' : ''}</p>
+        </div>
+      </div>
+      <div class="bn-overlay hidden" id="bn-mp">
+        <div class="bn-panel bn-mp-panel">
+          <div class="bn-mp-top"><div class="bn-logo">Blocks<span>Net</span></div><span>Multiplayer</span></div>
+          <div class="bn-mp-me" id="bn-mp-me">Loading…</div>
+          <p class="bn-status error" id="bn-mp-msg"></p>
+          <div class="bn-h2">Rooms</div>
+          <div class="bn-rooms" id="bn-rooms"></div>
+          <div class="bn-h2">Top players</div>
+          <div class="bn-rank">
+            <div class="bn-period"><button class="on" data-period="top" type="button">All time</button><button data-period="week" type="button">This week</button></div>
+            <ol id="bn-rank-list"></ol>
+            <p class="bn-hint bn-rank-note">Games with 2 or more real players count. The server decides the winner.</p>
+          </div>
+          <button class="bn-btn-ghost" id="bn-mp-back" type="button">&larr; Back</button>
         </div>
       </div>
       <div class="bn-overlay hidden" id="bn-online">
@@ -106,7 +123,7 @@
           </div>
           <div id="bn-on-room" class="bn-room hidden">
             <div class="bn-room-head">
-              <div class="bn-code-box"><small>Room code</small><b id="bn-code-show">·····</b></div>
+              <div class="bn-code-box"><small id="bn-code-label">Room code</small><b id="bn-code-show">·····</b></div>
               <button class="bn-btn-secondary" id="bn-share" type="button">Invite</button>
             </div>
             <ol class="bn-plist" id="bn-plist"></ol>
@@ -260,16 +277,31 @@
       if (atBottom || kind !== 'chat') c.scrollTop = c.scrollHeight;
     }
 
-    function newSession() {
+    function newSession(kind = 'p2p') {
       $('bn-chat').innerHTML = '';
       if (session) session.close();
-      const s = session = new BN.net.Session();
+      const s = session = kind === 'server' ? new BN.net.ServerSession() : new BN.net.Session();
+      $('bn-code-label').textContent = s.public ? 'Public room' : 'Room code';
+      $('bn-code-show').classList.toggle('bn-room-name', !!s.public);
       s.on('status', t => status(t));
-      s.on('error', t => { status(t, true); if (!s.isHost && !s.conn) { s.close(); session = null; } });
-      s.on('closed', t => { if (session === s) { leaveOnline(); $('bn-lobby-msg').textContent = t; } });
+      s.on('error', t => {
+        if (s.public) { if (session === s) { session = null; show('bn-online', false); openMP(t); } return; }
+        status(t, true); if (!s.isHost && !s.conn) { s.close(); session = null; }
+      });
+      s.on('closed', t => {
+        if (session !== s) return;
+        leaveOnline();
+        if (s.public) openMP(t); else $('bn-lobby-msg').textContent = t;
+      });
       s.on('ready', code => {
         $('bn-code-show').textContent = code;
-        roomChat(`Room ${code} is open. Tap Invite to send the link, chat here, then start the game.`, 'system');
+        roomChat(s.public
+          ? `Welcome to ${code}. Chat here; ${s.isHost ? 'you are the host, so you start the game when everyone is ready.' : 'the host starts the game.'}`
+          : `Room ${code} is open. Tap Invite to send the link, chat here, then start the game.`, 'system');
+      });
+      s.on('role', isHost => {
+        if (session !== s || room.running) return;
+        if (!$('bn-online').classList.contains('hidden') || !$('bn-end').classList.contains('hidden')) openOnline(isHost ? 'host' : 'guest');
       });
       s.on('lobby', l => {
         if (!s.isHost && $('bn-on-join') && !$('bn-on-join').classList.contains('hidden')) openOnline('guest');
@@ -290,7 +322,7 @@
         }
         app.me = room.players.find(p => p.isLocal) || room.players[0];
         room.net = s;
-        room.authority = s.isHost;
+        room.authority = s.serverAuthority ? false : s.isHost;
         config.onSetup && config.onSetup(app);
         show('bn-online', false);
         start();
@@ -301,7 +333,7 @@
         if (room.running) { room.running = false; room.log('*** Connection lost – you are out of this game ***', 'death'); }
         show('bn-end', false);
         openOnline('guest');
-        roomChat('Connection to the host was lost – reconnecting…', 'death');
+        roomChat(`Connection to the ${s.public ? 'server' : 'host'} was lost – reconnecting…`, 'death');
       });
       s.on('reconnected', () => { if (session === s) roomChat('Reconnected. Waiting for the host to start the next game…', 'system'); });
       s.on('chat', c => {
@@ -310,6 +342,51 @@
         roomChat(text, c.system ? 'system' : 'chat');
       });
       return s;
+    }
+
+    // ---------------------------------------------------------- public rooms screen
+    let mpTimer = null, mpData = null, mpPeriod = 'top';
+    const esc = t => String(t).replace(/[&<>"]/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[ch]));
+    function openMP(message) {
+      show('bn-lobby', false); show('bn-online', false); show('bn-end', false); show('bn-mp', true);
+      $('bn-mp-msg').textContent = message || '';
+      refreshMP();
+      clearInterval(mpTimer);
+      mpTimer = setInterval(() => { if ($('bn-mp').classList.contains('hidden')) clearInterval(mpTimer); else refreshMP(); }, 3000);
+    }
+    async function refreshMP() {
+      try { mpData = await BN.net.fetchLobby(); renderMP(); }
+      catch (e) { $('bn-mp-me').textContent = "Can't reach the BlocksNet server right now. Retrying…"; }
+    }
+    function renderMP() {
+      const d = mpData, name = readSettings().name;
+      const me = d.me;
+      $('bn-mp-me').innerHTML = `Playing as <b>${esc(name)}</b>` + (me ? ` · rank #${me.rank} · ${me.wins} win${me.wins === 1 ? '' : 's'}` : ' · not ranked yet');
+      const max = d.maxPlayers || MAX_PLAYERS;
+      $('bn-rooms').innerHTML = d.rooms.map(r => {
+        const st = { empty: ['Empty', 'st-empty'], waiting: ['Waiting', 'st-wait'], playing: ['Playing', 'st-play'] }[r.state] || ['?', 'st-empty'];
+        const seats = Array.from({ length: max }, (_, k) => r.players[k]
+          ? `<div class="bn-seat p p${k + 1}">${esc(r.players[k])}</div>` : '<div class="bn-seat">open</div>').join('');
+        const n = r.players.length;
+        const btn = r.state === 'playing' ? `<button class="bn-join" disabled>In game · ${n}/${max}</button>`
+          : n >= max ? '<button class="bn-join" disabled>Full</button>'
+          : `<button class="bn-join" data-room="${r.n}" type="button">${n ? 'Join' : 'Open room'} · ${n}/${max}</button>`;
+        return `<div class="bn-rcard"><div class="head"><span class="name">Room ${r.n}</span><span class="state ${st[1]}">${st[0]}</span></div><div class="bn-seats">${seats}</div>${btn}</div>`;
+      }).join('');
+      const list = d[mpPeriod] || [];
+      $('bn-rank-list').innerHTML = list.length ? list.map((p, i) =>
+        `<li class="${p.you ? 'you' : ''}"><span class="n">${i + 1}</span><span class="who">${esc(p.name)}</span><span class="w">${p.wins}<small>${p.games} game${p.games === 1 ? '' : 's'}</small></span></li>`).join('')
+        : '<li class="empty">No ranked games yet. Win a game with 2+ players to get here.</li>';
+    }
+    function joinPublic(n) {
+      const { name } = readSettings();
+      if (app.fullscreen) enterFullscreen(config.orientation);
+      clearInterval(mpTimer);
+      show('bn-mp', false);
+      $('bn-plist').innerHTML = '';
+      $('bn-code-show').textContent = `Room ${n}`;
+      openOnline('guest');
+      newSession('server').joinRoom(n, name);
     }
 
     function hostStart() {
@@ -346,7 +423,18 @@
         if (session) session.chat($('bn-chat-in').value);
         $('bn-chat-in').value = '';
       });
-      $('bn-leave').addEventListener('click', () => leaveOnline());
+      $('bn-leave').addEventListener('click', () => { const pub = session && session.public; leaveOnline(); if (pub) openMP(); });
+      if ($('bn-mp-open')) {
+        $('bn-mp-open').addEventListener('click', () => { $('bn-lobby-msg').textContent = ''; readSettings(); openMP(); });
+        $('bn-mp-back').addEventListener('click', () => { clearInterval(mpTimer); show('bn-mp', false); show('bn-lobby', true); });
+        $('bn-rooms').addEventListener('click', e => { const b = e.target.closest('.bn-join[data-room]'); if (b) joinPublic(+b.dataset.room); });
+        document.querySelectorAll('.bn-period button').forEach(b => b.addEventListener('click', () => {
+          mpPeriod = b.dataset.period;
+          document.querySelectorAll('.bn-period button').forEach(x => x.classList.toggle('on', x === b));
+          if (mpData) renderMP();
+        }));
+        if (new URLSearchParams(location.search).get('room')) openMP();
+      }
       const openDiag = () => {
         $('bn-diag').textContent = BN.net.diag() + `\n\nscreen ${innerWidth}x${innerHeight} · online=${navigator.onLine} · ${new Date().toISOString()}`;
         show('bn-diag-sheet', true);
