@@ -595,12 +595,28 @@
       return id;
     } catch (e) { return rid() + rid(); }
   }
+  // Errors carry a short, human-readable reason that the Multiplayer screen shows.
   async function fetchLobby() {
     const base = serverURL();
-    if (!base) throw new Error('no server');
-    const r = await fetch(`${base}/lobby?pid=${encodeURIComponent(playerId())}&t=${Date.now()}`, { cache: 'no-store' });
-    if (!r.ok) throw new Error('server ' + r.status);
-    return r.json();
+    if (!base) throw new Error('no server address set');
+    const url = `${base}/lobby?pid=${encodeURIComponent(playerId())}&t=${Date.now()}`;
+    let r;
+    try { r = await fetch(url, { cache: 'no-store' }); }
+    catch (e) {
+      // The browser hides the difference between "unreachable" and "something else answered
+      // without permission for this page" (CORS), so say both.
+      const why = `no usable reply from ${base} – the server may be down, still deploying, or not the BlocksNet server (${e.message || e})`;
+      note('lobby: ' + why); throw new Error(why);
+    }
+    const body = await r.text();
+    if (!r.ok) { const why = `server answered ${r.status}${body ? ': ' + body.slice(0, 80) : ''}`; note('lobby: ' + why); throw new Error(why); }
+    let data;
+    try { data = JSON.parse(body); } catch (e) { data = null; }
+    if (!data || !Array.isArray(data.rooms)) {
+      const why = `${base} is not running the BlocksNet server (it answered: "${body.slice(0, 60).replace(/\s+/g, ' ')}")`;
+      note('lobby: ' + why); throw new Error(why);
+    }
+    return data;
   }
 
   class ServerSession {

@@ -356,7 +356,7 @@
     }
     async function refreshMP() {
       try { mpData = await BN.net.fetchLobby(); renderMP(); }
-      catch (e) { $('bn-mp-me').textContent = "Can't reach the BlocksNet server right now. Retrying…"; }
+      catch (e) { $('bn-mp-me').textContent = `Can't load the rooms: ${e.message}. Retrying…`; }
     }
     function renderMP() {
       const d = mpData, name = readSettings().name;
