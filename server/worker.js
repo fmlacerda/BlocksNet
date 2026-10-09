@@ -15,7 +15,7 @@
  */
 import { DurableObject } from 'cloudflare:workers';
 
-const SERVER_VERSION = '2026.10.09g';   // shown on /health, to check which code is deployed
+const SERVER_VERSION = '2026.10.09h';   // shown on /health, to check which code is deployed
 const ROOMS = 6;
 const MAX_PLAYERS = 4;
 const PROTO = 1;
