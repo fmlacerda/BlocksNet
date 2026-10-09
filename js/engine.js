@@ -639,7 +639,7 @@
   }
 
   global.BN = Object.assign(global.BN || {}, {
-    VERSION: '2026.10.09g',   // keep in sync with version.json (used for auto-update)
+    VERSION: '2026.10.09i',   // keep in sync with version.json (used for auto-update)
     W, H, MAX_INV, COLORS, SHAPES, SPECIAL_INFO, SPECIAL_FREQ, SPEEDS, DEFAULT_SETTINGS,
     Room, Player, BotBrain, pieceCells, isSpecial, encodeField, decodeField,
   });

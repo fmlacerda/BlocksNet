@@ -296,7 +296,9 @@
       s.on('ready', code => {
         $('bn-code-show').textContent = code;
         roomChat(s.public
-          ? `Welcome to ${code}. Chat here; ${s.isHost ? 'you are the host, so you start the game when everyone is ready.' : 'the host starts the game.'}`
+          ? (s.spectator
+            ? `You are watching ${code} (all 4 seats are taken). You will get a seat when one is free after a game.`
+            : `Welcome to ${code}. Chat here; ${s.isHost ? 'you are the host, so you start the game when everyone is ready.' : 'the host starts the game.'}`)
           : `Room ${code} is open. Tap Invite to send the link, chat here, then start the game.`, 'system');
       });
       s.on('role', isHost => {
@@ -306,7 +308,8 @@
       s.on('lobby', l => {
         if (!s.isHost && $('bn-on-join') && !$('bn-on-join').classList.contains('hidden')) openOnline('guest');
         $('bn-code-show').textContent = l.code || s.code;
-        $('bn-plist').innerHTML = l.players.map(p => `<li>${p.name}${p.host ? ' <em>host</em>' : ''}</li>`).join('');
+        $('bn-plist').innerHTML = l.players.map(p => `<li>${p.name}${p.host ? ' <em>host</em>' : ''}</li>`).join('')
+          + (l.watchers || []).map(n => `<li class="watcher">&#128065; ${n}</li>`).join('');
         const free = MAX_PLAYERS - l.players.length;
         const fill = $('bn-fill');
         [...fill.options].forEach(o => { o.disabled = +o.value > free; });
@@ -314,6 +317,8 @@
       });
       s.on('start', msg => {
         if (session !== s) return;
+        if (!msg.players.some(p => p.owner === msg.me)) { enterWatch(s, msg, false); return; }
+        setWatching(false);
         room.settings = sanitizeSettings(msg.settings);
         room.players = []; room.bots = [];
         for (const p of msg.players) {
@@ -328,9 +333,12 @@
         start();
       });
       s.on('game', m => room.receive(m));
+      s.on('watch', snap => { if (session === s) enterWatch(s, snap, true); });
+      s.on('seat', () => { if (session === s) roomChat('A seat is free – you will play in the next game.', 'system'); });
       s.on('reconnecting', () => {
         if (session !== s) return;
-        if (room.running) { room.running = false; room.log('*** Connection lost – you are out of this game ***', 'death'); }
+        if (room.running) { room.running = false; if (!app.watching) room.log('*** Connection lost – you are out of this game ***', 'death'); }
+        setWatching(false);
         show('bn-end', false);
         openOnline('guest');
         roomChat(`Connection to the ${s.public ? 'server' : 'host'} was lost – reconnecting…`, 'death');
@@ -368,17 +376,18 @@
         const seats = Array.from({ length: max }, (_, k) => r.players[k]
           ? `<div class="bn-seat p p${k + 1}">${esc(r.players[k])}</div>` : '<div class="bn-seat">open</div>').join('');
         const n = r.players.length;
-        const btn = r.state === 'playing' ? `<button class="bn-join" disabled>In game · ${n}/${max}</button>`
-          : n >= max ? '<button class="bn-join" disabled>Full</button>'
+        const btn = n >= max ? `<button class="bn-join watch" data-room="${r.n}" data-watch="1" type="button">&#128065; Watch</button>`
+          : r.state === 'playing' ? `<button class="bn-join" data-room="${r.n}" type="button">Join · watch now · ${n}/${max}</button>`
           : `<button class="bn-join" data-room="${r.n}" type="button">${n ? 'Join' : 'Open room'} · ${n}/${max}</button>`;
-        return `<div class="bn-rcard"><div class="head"><span class="name">Room ${r.n}</span><span class="state ${st[1]}">${st[0]}</span></div><div class="bn-seats">${seats}</div>${btn}</div>`;
+        const eye = r.watchers ? `<span class="eye">&#128065; ${r.watchers}</span>` : '';
+        return `<div class="bn-rcard"><div class="head"><span class="name">Room ${r.n}</span>${eye}<span class="state ${st[1]}">${st[0]}</span></div><div class="bn-seats">${seats}</div>${btn}</div>`;
       }).join('');
       const list = d[mpPeriod] || [];
       $('bn-rank-list').innerHTML = list.length ? list.map((p, i) =>
         `<li class="${p.you ? 'you' : ''}"><span class="n">${i + 1}</span><span class="who">${esc(p.name)}</span><span class="w">${p.wins}<small>${p.games} game${p.games === 1 ? '' : 's'}</small></span></li>`).join('')
         : '<li class="empty">No ranked games yet. Win a game with 2+ players to get here.</li>';
     }
-    function joinPublic(n) {
+    function joinPublic(n, watch = false) {
       const { name } = readSettings();
       if (app.fullscreen) enterFullscreen(config.orientation);
       clearInterval(mpTimer);
@@ -386,8 +395,37 @@
       $('bn-plist').innerHTML = '';
       $('bn-code-show').textContent = `Room ${n}`;
       openOnline('guest');
-      newSession('server').joinRoom(n, name);
+      newSession('server').joinRoom(n, name, watch);
     }
+
+    // ---------------------------------------------------------- watching a game
+    function setWatching(on) {
+      if (!!app.watching === !!on) return;
+      app.watching = !!on;
+      document.body.classList.toggle('watching', !!on);
+      dispatchEvent(new Event('resize'));          // layout gives the pad's space to the field
+    }
+    // Every field is a remote mirror; the big field follows one player (tap others to switch).
+    function enterWatch(s, msg, snapshot) {
+      room.settings = sanitizeSettings(msg.settings);
+      room.players = []; room.bots = [];
+      for (const p of msg.players) room.addPlayer(p.name, { slot: p.slot, remote: true });
+      room.net = s;
+      room.authority = false;
+      setWatching(true);
+      app.me = room.players[0];
+      show('bn-online', false);
+      start();
+      if (snapshot) {
+        for (const f of msg.fields) room.receive(f);
+        for (const sl of msg.dead) { const p = room.bySlot(sl); if (p && p.alive) p.die(); }
+      }
+      app.me = room.players.find(p => p.alive) || room.players[0];
+      config.onSetup && config.onSetup(app);
+      room.log(`*** Watching${snapshot ? ' the game in progress' : ''} – you play in the next game with a free seat ***`, 'system');
+    }
+    app.follow = p => { if (app.watching && p) { app.me = p; config.onSetup && config.onSetup(app); } };
+    app.leaveWatch = () => { const pub = session && session.public; leaveOnline(); if (pub) openMP(); };
 
     function hostStart() {
       if (!session || !session.isHost) return;   // only the host can start a game
@@ -427,7 +465,7 @@
       if ($('bn-mp-open')) {
         $('bn-mp-open').addEventListener('click', () => { $('bn-lobby-msg').textContent = ''; readSettings(); openMP(); });
         $('bn-mp-back').addEventListener('click', () => { clearInterval(mpTimer); show('bn-mp', false); show('bn-lobby', true); });
-        $('bn-rooms').addEventListener('click', e => { const b = e.target.closest('.bn-join[data-room]'); if (b) joinPublic(+b.dataset.room); });
+        $('bn-rooms').addEventListener('click', e => { const b = e.target.closest('.bn-join[data-room]'); if (b) joinPublic(+b.dataset.room, !!b.dataset.watch); });
         document.querySelectorAll('.bn-period button').forEach(b => b.addEventListener('click', () => {
           mpPeriod = b.dataset.period;
           document.querySelectorAll('.bn-period button').forEach(x => x.classList.toggle('on', x === b));
@@ -476,6 +514,7 @@
       const youWon = winner === app.me;
       if (youWon) haptic([30, 40, 30, 40, 80]);
       if (session) {
+        setWatching(false);
         roomChat(winner ? `*** ${winner.name} wins! ***` : '*** Game over ***', 'system');
         if (!session.isHost) roomChat('Waiting for the host to start the next game…', 'info');
         setTimeout(() => { if (session && !room.running) openOnline(session.isHost ? 'host' : 'guest'); }, 1500);
@@ -509,7 +548,7 @@
     });
 
     // ---------------------------------------------------------- sound effects
-    const sfx = (name, arg) => { if (!demo && BN.sound) BN.sound.play(name, arg); return true; };
+    const sfx = (name, arg) => { if (!demo && !app.watching && BN.sound) BN.sound.play(name, arg); return true; };
     room.on('start', () => sfx('start'));
     room.on('lock', e => { if (e.player === app.me) sfx(e.hard ? 'drop' : 'lock'); });
     room.on('clear', e => {
@@ -539,6 +578,10 @@
         else if (text.trim()) room.log(`<${app.me ? app.me.name : 'you'}> ${text.trim()}`, 'chat');
       },
     };
+    for (const k of ['left', 'right', 'rotate', 'soft', 'drop', 'use', 'discard']) {
+      const f = act[k];
+      act[k] = (...a) => (app.watching ? undefined : f(...a));
+    }
     app.act = act;
     BN.current = app;   // handy from the dev console
     app.bindHold = bindHold;

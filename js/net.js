@@ -635,7 +635,8 @@
     on(ev, fn) { (this.listeners[ev] = this.listeners[ev] || []).push(fn); return this; }
     emit(ev, d) { (this.listeners[ev] || []).forEach(fn => fn(d)); }
 
-    joinRoom(n, name) {
+    joinRoom(n, name, watch = false) {
+      this.watch = !!watch;
       this.room = n | 0;
       this.code = `Room ${this.room}`;
       this.name = cleanName(name);
@@ -671,7 +672,7 @@
         this.ws = ws;
         this.rx = Date.now();
         this.conn = { send: m => { try { if (ws.readyState === 1) ws.send(JSON.stringify(m)); } catch (e) { /* closing */ } }, close: () => { try { ws.close(); } catch (e) { /* ignore */ } ended_(1000, 'closed by this device'); } };
-        this.conn.send({ t: 'hello', v: PROTO, name: this.name, pid: this.pid, ver: BN.VERSION });
+        this.conn.send({ t: 'hello', v: PROTO, name: this.name, pid: this.pid, ver: BN.VERSION, watch: this.watch && !this.welcomed });
         this.startHeartbeat();
       };
       ws.onmessage = e => {
@@ -720,6 +721,7 @@
         case 'welcome': {
           this.myId = m.id;
           this.isHost = !!m.host;
+          this.spectator = !!m.spectator;
           const first = !this.welcomed;
           this.welcomed = true;
           this.emit('status', '');
@@ -729,9 +731,23 @@
           this.emit('role', this.isHost);
           break;
         }
+        case 'watch':
+          note('server: watching the game in progress');
+          this.emit('watch', {
+            players: (m.players || []).map(p => ({ slot: p.slot | 0, name: cleanName(p.name), owner: String(p.owner), bot: !!p.bot })),
+            settings: m.settings, fields: Array.isArray(m.fields) ? m.fields : [], dead: Array.isArray(m.dead) ? m.dead.map(x => x | 0) : [], me: this.myId,
+          });
+          break;
+        case 'seat':
+          this.spectator = false;
+          this.isHost = !!m.host;
+          note('server: took a free seat');
+          this.emit('seat');
+          this.emit('role', this.isHost);
+          break;
         case 'role': this.isHost = !!m.host; note(`server: you are now ${this.isHost ? 'the host' : 'a guest'}`); this.emit('role', this.isHost); break;
         case 'reject': note(`server: rejected – ${m.reason}`); this.failed(String(m.reason || 'Could not join.')); break;
-        case 'lobby': this.emit('lobby', { code: this.code, players: (m.players || []).map(p => ({ name: cleanName(p.name), host: !!p.host })) }); break;
+        case 'lobby': this.emit('lobby', { code: this.code, players: (m.players || []).map(p => ({ name: cleanName(p.name), host: !!p.host })), watchers: (m.watchers || []).map(cleanName) }); break;
         case 'start':
           note('server: game started');
           this.emit('start', {

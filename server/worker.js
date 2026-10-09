@@ -15,9 +15,10 @@
  */
 import { DurableObject } from 'cloudflare:workers';
 
-const SERVER_VERSION = '2026.10.09h';   // shown on /health, to check which code is deployed
+const SERVER_VERSION = '2026.10.09i';   // shown on /health, to check which code is deployed
 const ROOMS = 6;
 const MAX_PLAYERS = 4;
+const MAX_WATCHERS = 8;
 const PROTO = 1;
 const BOT_NAMES = ['Blockhead', 'LineLord', 'Nukem', 'Gravitas', 'QuakeBot', 'Specialist', 'T-Spin'];
 const SPEEDS = ['relaxed', 'classic', 'fast', 'turbo', 'insane'];
@@ -59,7 +60,9 @@ export class Hub extends DurableObject {
       games INTEGER NOT NULL DEFAULT 0, updated INTEGER NOT NULL DEFAULT 0)`);
     this.sql.exec(`CREATE TABLE IF NOT EXISTS results (pid TEXT NOT NULL, ts INTEGER NOT NULL, win INTEGER NOT NULL)`);
     this.sql.exec(`CREATE INDEX IF NOT EXISTS results_ts ON results (ts)`);
-    this.rooms = Array.from({ length: ROOMS }, (_, i) => ({ n: i + 1, clients: [], hostId: null, game: null }));
+    // clients = seated players (max 4, incl. late joiners waiting for the next game);
+    // watchers = spectators beyond the 4 seats.
+    this.rooms = Array.from({ length: ROOMS }, (_, i) => ({ n: i + 1, clients: [], watchers: [], hostId: null, game: null }));
     this.nextId = 1;
   }
 
@@ -83,6 +86,7 @@ export class Hub extends DurableObject {
       n: r.n,
       state: r.game ? 'playing' : r.clients.length ? 'waiting' : 'empty',
       players: r.clients.map(c => c.name),
+      watchers: r.watchers.length,
     }));
     // Player ids never leave the server; 'you' marks the caller's own row.
     const mark = rows => rows.map(({ pid: p, ...r }) => ({ ...r, you: !!pid && p === pid }));
@@ -122,7 +126,7 @@ export class Hub extends DurableObject {
   }
 
   send(c, m) { try { c.ws.send(JSON.stringify(m)); } catch (e) { /* socket closing */ } }
-  toRoom(room, m, except) { for (const c of room.clients) if (c !== except) this.send(c, m); }
+  toRoom(room, m, except) { for (const c of room.clients.concat(room.watchers)) if (c !== except) this.send(c, m); }
   system(room, text) { this.toRoom(room, { t: 'chat', system: true, text }); }
 
   onMessage(c, m) {
@@ -134,14 +138,18 @@ export class Hub extends DurableObject {
       c.name = cleanName(m.name);
       c.pid = cleanPid(m.pid) || c.id;
       // Same player coming back (e.g. after a dropped connection): replace the old link.
-      const old = room.clients.find(x => x.pid === c.pid);
+      const old = room.clients.concat(room.watchers).find(x => x.pid === c.pid);
       if (old) { this.leave(old, true); try { old.ws.close(1000, 'replaced'); } catch (e) { /* ignore */ } }
-      if (room.clients.length >= MAX_PLAYERS) { this.send(c, { t: 'reject', reason: `Room ${room.n} is full (${MAX_PLAYERS} players). Try another room.` }); c.ws.close(1000); return; }
+      // Full room (or asked to watch): join as a spectator.
+      const watch = !!m.watch || room.clients.length >= MAX_PLAYERS;
+      if (watch && room.watchers.length >= MAX_WATCHERS) { this.send(c, { t: 'reject', reason: `Room ${room.n} is full, and so are its ${MAX_WATCHERS} spectator places. Try another room.` }); c.ws.close(1000); return; }
       c.joined = true;
-      room.clients.push(c);
-      if (!room.hostId) room.hostId = c.id;
-      this.send(c, { t: 'welcome', id: c.id, room: room.n, host: room.hostId === c.id, playing: !!room.game });
-      this.system(room, `${c.name} ${old ? 'is back in' : 'joined'} the room`);
+      c.spectator = watch;
+      if (watch) room.watchers.push(c); else room.clients.push(c);
+      if (!watch && !room.hostId) room.hostId = c.id;
+      this.send(c, { t: 'welcome', id: c.id, room: room.n, host: room.hostId === c.id, playing: !!room.game, spectator: watch });
+      this.system(room, `${c.name} ${old ? 'is back in' : watch ? 'is watching' : 'joined'} the room`);
+      if (room.game) this.sendSnapshot(room, c);
       this.broadcastLobby(room);
       return;
     }
@@ -172,15 +180,28 @@ export class Hub extends DurableObject {
     const bots = Math.max(0, Math.min(MAX_PLAYERS - players.length, m.bots | 0));
     const skill = Math.max(0, Math.min(1, +m.skill || 0.5));
     for (let i = 0; i < bots; i++) players.push({ slot: players.length + 1, name: names[i], owner: c.id, bot: true, skill });
-    room.game = { players, alive: new Set(players.map(p => p.slot)), owners: new Map(players.map(p => [p.slot, p.owner])), started: Date.now() };
+    room.game = { players, settings, alive: new Set(players.map(p => p.slot)), owners: new Map(players.map(p => [p.slot, p.owner])), lastF: new Map(), started: Date.now() };
     this.toRoom(room, { t: 'start', players: players.map(({ pid, ...p }) => p), settings });
     this.broadcastLobby(room);
+  }
+
+  // Someone arriving mid-game gets the game as it is now, so they can watch it.
+  sendSnapshot(room, c) {
+    const g = room.game;
+    this.send(c, {
+      t: 'watch',
+      players: g.players.map(({ pid, ...p }) => p),
+      settings: g.settings,
+      fields: [...g.lastF.values()],
+      dead: g.players.map(p => p.slot).filter(sl => !g.alive.has(sl)),
+    });
   }
 
   gameMessage(c, m) {
     const room = c.room, g = room.game;
     const slot = m.t === 'f' || m.t === 'dead' ? m.slot : m.from;
     if (g.owners.get(slot) !== c.id) return;            // only for your own players
+    if (m.t === 'f') g.lastF.set(slot, m);
     this.toRoom(room, m, c);
     if (m.t === 'dead') { g.alive.delete(slot); this.checkEnd(room); }
   }
@@ -194,7 +215,20 @@ export class Hub extends DurableObject {
     room.game = null;
     this.toRoom(room, { t: 'end', winner });
     this.record(g, winner);
+    this.seatWatchers(room);
     this.broadcastLobby(room);
+  }
+
+  // Between games, spectators take any free seats (in the order they arrived).
+  seatWatchers(room) {
+    while (room.game === null && room.clients.length < MAX_PLAYERS && room.watchers.length) {
+      const w = room.watchers.shift();
+      w.spectator = false;
+      room.clients.push(w);
+      if (!room.hostId) room.hostId = w.id;
+      this.send(w, { t: 'seat', host: room.hostId === w.id });
+      this.system(room, `${w.name} took a free seat`);
+    }
   }
 
   record(g, winner) {
@@ -213,6 +247,13 @@ export class Hub extends DurableObject {
 
   leave(c, replaced = false) {
     const room = c.room;
+    const wi = room.watchers.indexOf(c);
+    if (wi >= 0) {
+      room.watchers.splice(wi, 1);
+      if (!replaced) this.system(room, `${c.name} stopped watching`);
+      this.broadcastLobby(room);
+      return;
+    }
     const i = room.clients.indexOf(c);
     if (i < 0) return;
     room.clients.splice(i, 1);
@@ -232,11 +273,12 @@ export class Hub extends DurableObject {
     if (!replaced) this.system(room, `${c.name} left the room`);
     if (!room.clients.length) room.game = null;
     this.checkEnd(room);
+    this.seatWatchers(room);
     this.broadcastLobby(room);
   }
 
   broadcastLobby(room) {
     const players = room.clients.map(x => ({ name: x.name, host: x.id === room.hostId }));
-    this.toRoom(room, { t: 'lobby', code: `Room ${room.n}`, players, playing: !!room.game });
+    this.toRoom(room, { t: 'lobby', code: `Room ${room.n}`, players, watchers: room.watchers.map(x => x.name), playing: !!room.game });
   }
 }

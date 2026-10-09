@@ -11,7 +11,7 @@
 <link rel="icon" href="icon.svg">
 <link rel="apple-touch-icon" href="icon.svg">
 <title>BlocksNet</title>
-<link rel="stylesheet" href="css/common.css?v=20261009g">
+<link rel="stylesheet" href="css/common.css?v=20261009i">
 <style>
   /* Portrait layout for up to 4 players: a slim status line on top so the playfield gets
      the space, your field on the left, the 3 opponents stacked on the right, special bar and
@@ -69,6 +69,14 @@
     will-change: transform, opacity;
   }
 
+  /* Watching someone else's game: no controls, a bar instead. */
+  .watchbar { display: none; flex: none; align-items: center; gap: 10px; padding: 10px 12px calc(10px + var(--safe-b)); border-top: 1px solid var(--line); background: #10141c; }
+  .watchbar span { flex: 1; font-size: 14px; color: var(--dim); }
+  .watchbar b { color: var(--text); }
+  .watchbar small { display: block; font-size: 11px; }
+  .watchbar button { background: var(--panel-2); border: 1px solid var(--line); border-radius: 10px; padding: 10px 14px; font-weight: 700; color: var(--text); touch-action: manipulation; }
+  body.watching .watchbar { display: flex; }
+  body.watching .pad { display: none; }
   .pad { flex: none; display: flex; flex-direction: column; gap: 6px; padding: 4px 6px 6px; }
   .pad .row { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 6px; }
   .pad button {
@@ -121,6 +129,11 @@
     </div>
   </div>
 
+  <div class="watchbar" id="watchbar">
+    <span>&#128065; Watching <b id="watchName"></b><small>tap a small field to follow that player</small></span>
+    <button id="watchLeave" type="button">Leave</button>
+  </div>
+
   <div class="pad">
     <div class="row" id="targets"></div>
     <div class="row">
@@ -138,13 +151,13 @@
     <form id="chatForm"><input id="chatIn" placeholder="Say something…" autocomplete="off"><button>Send</button></form>
   </div>
 
-<script src="js/engine.js?v=20261009g"></script>
-<script src="js/render.js?v=20261009g"></script>
-<script src="js/vendor/peerjs.min.js?v=20261009g"></script>
-<script src="js/config.js?v=20261009g"></script>
-<script src="js/net.js?v=20261009g"></script>
-<script src="js/sound.js?v=20261009g"></script>
-<script src="js/app.js?v=20261009g"></script>
+<script src="js/engine.js?v=20261009i"></script>
+<script src="js/render.js?v=20261009i"></script>
+<script src="js/vendor/peerjs.min.js?v=20261009i"></script>
+<script src="js/config.js?v=20261009i"></script>
+<script src="js/net.js?v=20261009i"></script>
+<script src="js/sound.js?v=20261009i"></script>
+<script src="js/app.js?v=20261009i"></script>
 <script>
 (function () {
   const R = BN.render;
@@ -159,7 +172,7 @@
       const el = document.createElement('div');
       el.className = 'opp';
       el.innerHTML = `<div class="tag"><b>${p.slot}</b><em>${p.name}</em></div><canvas></canvas>`;
-      el.addEventListener('click', () => app.act.use(p.slot));
+      el.addEventListener('click', () => (app.watching ? app.follow(p) : app.act.use(p.slot)));
       box.appendChild(el);
       return { p, el, canvas: el.querySelector('canvas') };
     });
@@ -234,7 +247,8 @@
     render(app) {
       const me = app.me;
       R.drawField($('meCanvas'), me, { grid: true, frame: '#3a4258', valign: 'top', inv: me.inv });
-      R.drawNext($('next'), me.next);
+      R.drawNext($('next'), app.watching ? null : me.next);
+      if (app.watching) $('watchName').textContent = me.name;
       $('lines').textContent = me.lines;
       $('level').textContent = me.level;
       for (const o of oppEls) R.drawField(o.canvas, o.p, { valign: 'top', highlight: me.inv.length && o.p.alive ? 'rgba(255,204,51,.6)' : null });
@@ -294,6 +308,7 @@
   $('muteBtn').addEventListener('click', () => { BN.sound.setMuted(!BN.sound.muted); showMute(); BN.sound.play('rotate'); });
   showMute();
   $('log').addEventListener('click', () => $('partyBtn').click());
+  $('watchLeave').addEventListener('click', () => app.leaveWatch());
   $('partyBtn').addEventListener('click', () => { $('party').classList.add('open'); $('partyBtn').classList.remove('unread'); });
   $('partyClose').addEventListener('click', () => $('party').classList.remove('open'));
   $('chatForm').addEventListener('submit', e => { e.preventDefault(); app.act.say($('chatIn').value); $('chatIn').value = ''; });
