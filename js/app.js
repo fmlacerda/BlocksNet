@@ -337,13 +337,29 @@
       s.on('seat', () => { if (session === s) roomChat('A seat is free – you will play in the next game.', 'system'); });
       s.on('reconnecting', () => {
         if (session !== s) return;
+        // Public rooms: the server keeps your seat for a few seconds, so keep playing.
+        if (s.public && room.running && !app.watching) { room.log('*** Connection lost – reconnecting… keep playing ***', 'death'); return; }
         if (room.running) { room.running = false; if (!app.watching) room.log('*** Connection lost – you are out of this game ***', 'death'); }
         setWatching(false);
         show('bn-end', false);
         openOnline('guest');
         roomChat(`Connection to the ${s.public ? 'server' : 'host'} was lost – reconnecting…`, 'death');
       });
-      s.on('reconnected', () => { if (session === s) roomChat('Reconnected. Waiting for the host to start the next game…', 'system'); });
+      s.on('reconnected', info => {
+        if (session !== s) return;
+        if (s.public && room.running && !app.watching) {
+          if (info && info.resumed) { room.log('*** Reconnected – the game goes on ***', 'system'); return; }
+          // Seat not kept (game over, or away too long): stop here; if the game is still
+          // going, the server's snapshot that follows switches to watching it.
+          room.running = false;
+          room.log('*** You were out of this game while disconnected ***', 'death');
+          show('bn-end', false);
+          openOnline(s.isHost ? 'host' : 'guest');
+          roomChat('Reconnected, but this game went on without you. You play in the next one.', 'system');
+          return;
+        }
+        roomChat('Reconnected. Waiting for the host to start the next game…', 'system');
+      });
       s.on('chat', c => {
         const text = c.system ? c.text : `<${c.name}> ${c.text}`;
         room.log(text, c.system ? 'system' : 'chat');

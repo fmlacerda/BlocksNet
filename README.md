@@ -74,6 +74,8 @@ index.html     the game page: layout and button wiring
 
 The **Multiplayer** button opens six public rooms (Room 1–6, up to 4 players each) and the top-players ranking (all time and this week). Joining a room opens its Partyline chat; the first player in the room is the host and starts the game (bots can fill empty seats); if the host leaves, the next player becomes host.
 
+**Short connection drops:** if a player's connection drops during a game (network blip, phone switching networks), the server keeps their seat and their bots for 10 seconds. The phone keeps playing and reconnects, and the game simply goes on. A player who doesn't come back in time is out of that game; leaving on purpose counts immediately.
+
 **Watching:** anyone who joins a room during a game sees it live right away and plays in the next game. When all 4 seats are taken, the room card offers **Watch** instead (up to 8 spectators). Spectators get a free seat automatically when a game ends. While watching, the big field follows one player (tap a small field to switch), the controls are hidden and **Leave** returns to the room list. Spectators can chat.
 
 These rooms run on a small server, `server/worker.js` (a Cloudflare Worker with one Durable Object), configured by `wrangler.jsonc`:

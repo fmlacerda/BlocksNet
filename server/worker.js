@@ -15,10 +15,11 @@
  */
 import { DurableObject } from 'cloudflare:workers';
 
-const SERVER_VERSION = '2026.10.09i';   // shown on /health, to check which code is deployed
+const SERVER_VERSION = '2026.10.10a';   // shown on /health, to check which code is deployed
 const ROOMS = 6;
 const MAX_PLAYERS = 4;
 const MAX_WATCHERS = 8;
+const GRACE_MS = 10000;   // a player who drops mid-game keeps their seat this long
 const PROTO = 1;
 const BOT_NAMES = ['Blockhead', 'LineLord', 'Nukem', 'Gravitas', 'QuakeBot', 'Specialist', 'T-Spin'];
 const SPEEDS = ['relaxed', 'classic', 'fast', 'turbo', 'insane'];
@@ -116,13 +117,12 @@ export class Hub extends DurableObject {
       if (!m || typeof m !== 'object') return;
       try { this.onMessage(c, m); } catch (e) { /* never let one bad message break the room */ }
     });
-    const gone = () => this.leave(c);
     ws.addEventListener('close', ev => {
       // Complete the closing handshake, otherwise the phone keeps waiting for it.
       try { ws.close(ev.code === 1005 ? 1000 : ev.code, 'bye'); } catch (e) { /* already closed */ }
-      gone();
+      this.leave(c, false, ev.code);
     });
-    ws.addEventListener('error', gone);
+    ws.addEventListener('error', () => this.leave(c, false, 1006));
   }
 
   send(c, m) { try { c.ws.send(JSON.stringify(m)); } catch (e) { /* socket closing */ } }
@@ -138,18 +138,27 @@ export class Hub extends DurableObject {
       c.name = cleanName(m.name);
       c.pid = cleanPid(m.pid) || c.id;
       // Same player coming back (e.g. after a dropped connection): replace the old link.
+      // Same player back on a new link (old link not noticed as dead yet, or dropped within
+      // the grace period): hand their seat and players in the running game to the new link.
       const old = room.clients.concat(room.watchers).find(x => x.pid === c.pid);
-      if (old) { this.leave(old, true); try { old.ws.close(1000, 'replaced'); } catch (e) { /* ignore */ } }
+      let resumeFrom = null;
+      if (old) { resumeFrom = old.id; this.leave(old, true); try { old.ws.close(1000, 'replaced'); } catch (e) { /* ignore */ } }
+      const away = room.game && room.game.away.get(c.pid);
+      if (away) { resumeFrom = away.oldId; clearTimeout(away.timer); room.game.away.delete(c.pid); }
+      let resumed = false;
+      if (room.game && resumeFrom) {
+        for (const [slot, owner] of room.game.owners) if (owner === resumeFrom) { room.game.owners.set(slot, c.id); resumed = true; }
+      }
       // Full room (or asked to watch): join as a spectator.
-      const watch = !!m.watch || room.clients.length >= MAX_PLAYERS;
+      const watch = !resumed && (!!m.watch || room.clients.length >= MAX_PLAYERS);
       if (watch && room.watchers.length >= MAX_WATCHERS) { this.send(c, { t: 'reject', reason: `Room ${room.n} is full, and so are its ${MAX_WATCHERS} spectator places. Try another room.` }); c.ws.close(1000); return; }
       c.joined = true;
       c.spectator = watch;
       if (watch) room.watchers.push(c); else room.clients.push(c);
       if (!watch && !room.hostId) room.hostId = c.id;
-      this.send(c, { t: 'welcome', id: c.id, room: room.n, host: room.hostId === c.id, playing: !!room.game, spectator: watch });
-      this.system(room, `${c.name} ${old ? 'is back in' : watch ? 'is watching' : 'joined'} the room`);
-      if (room.game) this.sendSnapshot(room, c);
+      this.send(c, { t: 'welcome', id: c.id, room: room.n, host: room.hostId === c.id, playing: !!room.game, spectator: watch, resumed });
+      this.system(room, resumed ? `${c.name} reconnected – the game goes on` : `${c.name} ${old || away ? 'is back in' : watch ? 'is watching' : 'joined'} the room`);
+      if (room.game && !resumed) this.sendSnapshot(room, c);
       this.broadcastLobby(room);
       return;
     }
@@ -180,7 +189,7 @@ export class Hub extends DurableObject {
     const bots = Math.max(0, Math.min(MAX_PLAYERS - players.length, m.bots | 0));
     const skill = Math.max(0, Math.min(1, +m.skill || 0.5));
     for (let i = 0; i < bots; i++) players.push({ slot: players.length + 1, name: names[i], owner: c.id, bot: true, skill });
-    room.game = { players, settings, alive: new Set(players.map(p => p.slot)), owners: new Map(players.map(p => [p.slot, p.owner])), lastF: new Map(), started: Date.now() };
+    room.game = { players, settings, alive: new Set(players.map(p => p.slot)), owners: new Map(players.map(p => [p.slot, p.owner])), lastF: new Map(), away: new Map(), started: Date.now() };
     this.toRoom(room, { t: 'start', players: players.map(({ pid, ...p }) => p), settings });
     this.broadcastLobby(room);
   }
@@ -212,6 +221,7 @@ export class Hub extends DurableObject {
     if (!g) return;
     if (g.alive.size > 1 || (g.alive.size === 1 && g.players.length === 1)) return;
     const winner = g.alive.size === 1 ? [...g.alive][0] : 0;
+    for (const a of g.away.values()) clearTimeout(a.timer);
     room.game = null;
     this.toRoom(room, { t: 'end', winner });
     this.record(g, winner);
@@ -245,7 +255,7 @@ export class Hub extends DurableObject {
     this.sql.exec(`DELETE FROM results WHERE ts < ?`, now - 8 * 24 * 3600 * 1000);
   }
 
-  leave(c, replaced = false) {
+  leave(c, replaced = false, code = 1000) {
     const room = c.room;
     const wi = room.watchers.indexOf(c);
     if (wi >= 0) {
@@ -257,11 +267,16 @@ export class Hub extends DurableObject {
     const i = room.clients.indexOf(c);
     if (i < 0) return;
     room.clients.splice(i, 1);
-    // Their players (and the bots, if they were host) are out of the current game.
-    if (room.game) {
-      for (const [slot, owner] of room.game.owners) {
-        if (owner === c.id && room.game.alive.has(slot)) { room.game.alive.delete(slot); this.toRoom(room, { t: 'dead', slot }); }
-      }
+    const g = room.game;
+    const inGame = g && [...g.owners].some(([slot, owner]) => owner === c.id && g.alive.has(slot));
+    let held = false;
+    if (inGame && !replaced) {
+      if (code !== 1000) {
+        // Dropped (network blip, app in background…): keep their players for a few seconds.
+        held = true;
+        g.away.set(c.pid, { oldId: c.id, name: c.name, timer: setTimeout(() => this.expire(room, c.pid), GRACE_MS) });
+        this.system(room, `${c.name} lost connection – waiting ${GRACE_MS / 1000} s for them to come back`);
+      } else this.knockOut(room, c.id);       // left on purpose: out now
     }
     if (room.hostId === c.id) {
       room.hostId = room.clients[0] ? room.clients[0].id : null;
@@ -270,8 +285,31 @@ export class Hub extends DurableObject {
         if (!replaced) this.system(room, `${room.clients[0].name} is now the host`);
       }
     }
-    if (!replaced) this.system(room, `${c.name} left the room`);
-    if (!room.clients.length) room.game = null;
+    if (!replaced && !held) this.system(room, `${c.name} left the room`);
+    if (!room.clients.length && room.game && !room.game.away.size) room.game = null;
+    this.checkEnd(room);
+    this.seatWatchers(room);
+    this.broadcastLobby(room);
+  }
+
+  // Their players (and the bots, if they were host) are out of the current game.
+  knockOut(room, ownerId) {
+    const g = room.game;
+    if (!g) return;
+    for (const [slot, owner] of g.owners) {
+      if (owner === ownerId && g.alive.has(slot)) { g.alive.delete(slot); this.toRoom(room, { t: 'dead', slot }); }
+    }
+  }
+
+  // Grace period over and they didn't come back.
+  expire(room, pid) {
+    const g = room.game;
+    const a = g && g.away.get(pid);
+    if (!a) return;
+    g.away.delete(pid);
+    this.system(room, `${a.name} did not come back and is out of this game`);
+    this.knockOut(room, a.oldId);
+    if (!room.clients.length && !g.away.size) room.game = null;
     this.checkEnd(room);
     this.seatWatchers(room);
     this.broadcastLobby(room);

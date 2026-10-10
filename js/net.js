@@ -727,7 +727,7 @@
           this.emit('status', '');
           note(`server: in ${this.code}${this.isHost ? ' as host' : ''}`);
           if (first) this.emit('ready', this.code);
-          if (this.reconnecting) { this.reconnecting = null; this.emit('reconnected'); }
+          if (this.reconnecting) { this.reconnecting = null; note(`server: ${m.resumed ? 'seat kept – game continues' : 'back in the room'}`); this.emit('reconnected', { resumed: !!m.resumed }); }
           this.emit('role', this.isHost);
           break;
         }
