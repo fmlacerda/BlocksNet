@@ -215,3 +215,6 @@ button { font: inherit; color: inherit; border: 0; background: none; cursor: poi
 .bn-stats ul { list-style: none; margin: 5px 2px 0; display: flex; flex-direction: column; gap: 1px; }
 .bn-stats p { margin: 4px 2px 0; color: var(--dim); font-size: 9px; }
 .bn-mp-me small { display: block; margin-top: 2px; }
+/* Rooms with a special game mode (SNS, Fast) */
+.bn-rmode { font-size: 10px; color: var(--dim); margin-top: -3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.bn-rmode b { color: #111; background: #8fd3ff; border-radius: 4px; padding: 0 4px; margin-right: 3px; font-weight: 800; }

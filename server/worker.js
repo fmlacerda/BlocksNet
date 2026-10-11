@@ -1,8 +1,9 @@
 /*
  * BlocksNet game server (Cloudflare Worker + one Durable Object).
  *
- * - Six public rooms (1-6), up to 4 players each. Players connect with a WebSocket to
- *   /ws/room/<n>. The first player in a room is its host: the host starts games and runs
+ * - Six public rooms (1-6), up to 4 players each. Rooms 1-4 play normal games, room 5 is
+ *   SNS (sticks and squares only) and room 6 is Fast (30% faster); the room sets the mode.
+ *   Players connect with a WebSocket to /ws/room/<n>. The first player in a room is its host: the host starts games and runs
  *   the bots; if the host leaves, the next player becomes host.
  * - The server relays game messages between the players in a room (each phone still
  *   simulates its own field, exactly as in phone-to-phone play) and checks that a player
@@ -20,7 +21,7 @@
  */
 import { DurableObject } from 'cloudflare:workers';
 
-const SERVER_VERSION = '2026.10.11a';   // shown on /health, to check which code is deployed
+const SERVER_VERSION = '2026.10.11b';   // shown on /health, to check which code is deployed
 const ROOMS = 6;
 const MAX_PLAYERS = 4;
 const MAX_WATCHERS = 8;
@@ -31,6 +32,8 @@ const SPEEDS = ['relaxed', 'classic', 'fast', 'turbo', 'insane'];
 const GAME_TYPES = ['f', 'lines', 'special', 'dead'];
 const HOSTILE = 'arsbqo';   // specials that hurt the target (same as the game's 'hostile' flag)
 const MIN_SPEED_MS = 30000;   // speed awards and best speed need at least this much play
+// Game mode of each room (rooms 1-4 normal; 5 = SNS, sticks and squares only; 6 = Fast, 30% faster).
+const ROOM_MODES = ['normal', 'normal', 'normal', 'normal', 'sns', 'fast'];
 const WEEK_MS = 7 * 24 * 3600 * 1000;
 
 const cleanName = n => (String(n || '').replace(/[^\p{L}\p{N} _.\-]/gu, '').trim().slice(0, 12)) || 'Player';
@@ -74,7 +77,7 @@ export class Hub extends DurableObject {
     }
     // clients = seated players (max 4, incl. late joiners waiting for the next game);
     // watchers = spectators beyond the 4 seats.
-    this.rooms = Array.from({ length: ROOMS }, (_, i) => ({ n: i + 1, clients: [], watchers: [], hostId: null, game: null }));
+    this.rooms = Array.from({ length: ROOMS }, (_, i) => ({ n: i + 1, mode: ROOM_MODES[i] || 'normal', clients: [], watchers: [], hostId: null, game: null }));
     this.nextId = 1;
   }
 
@@ -96,6 +99,7 @@ export class Hub extends DurableObject {
   summary(pid) {
     const rooms = this.rooms.map(r => ({
       n: r.n,
+      mode: r.mode,
       state: r.game ? 'playing' : r.clients.length ? 'waiting' : 'empty',
       players: r.clients.map(c => c.name),
       watchers: r.watchers.length,
@@ -196,6 +200,7 @@ export class Hub extends DurableObject {
       speed: SPEEDS.includes(s.speed) ? s.speed : 'classic',
       startLevel: Math.max(1, Math.min(99, s.startLevel | 0 || 1)),
       linesPerLevel: Math.max(1, Math.min(20, s.linesPerLevel | 0 || 2)),
+      mode: room.mode,                                  // set by the room, not the host
     };
     const players = room.clients.map((x, i) => ({ slot: i + 1, name: x.name, owner: x.id, pid: x.pid }));
     const names = BOT_NAMES.slice().sort(() => Math.random() - 0.5);
@@ -393,6 +398,6 @@ export class Hub extends DurableObject {
 
   broadcastLobby(room) {
     const players = room.clients.map(x => ({ name: x.name, host: x.id === room.hostId }));
-    this.toRoom(room, { t: 'lobby', code: `Room ${room.n}`, players, watchers: room.watchers.map(x => x.name), playing: !!room.game });
+    this.toRoom(room, { t: 'lobby', code: `Room ${room.n}`, mode: room.mode, players, watchers: room.watchers.map(x => x.name), playing: !!room.game });
   }
 }

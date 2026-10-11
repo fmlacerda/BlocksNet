@@ -762,7 +762,7 @@
           break;
         case 'role': this.isHost = !!m.host; note(`server: you are now ${this.isHost ? 'the host' : 'a guest'}`); this.emit('role', this.isHost); break;
         case 'reject': note(`server: rejected – ${m.reason}`); this.failed(String(m.reason || 'Could not join.')); break;
-        case 'lobby': this.emit('lobby', { code: this.code, players: (m.players || []).map(p => ({ name: cleanName(p.name), host: !!p.host })), watchers: (m.watchers || []).map(cleanName) }); break;
+        case 'lobby': this.emit('lobby', { code: this.code, players: (m.players || []).map(p => ({ name: cleanName(p.name), host: !!p.host })), watchers: (m.watchers || []).map(cleanName), mode: String(m.mode || 'normal') }); break;
         case 'start':
           note('server: game started');
           this.emit('start', {

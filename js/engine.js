@@ -40,7 +40,14 @@
     turbo:   { label: 'Turbo',   base: 350,  step: 10, min: 35 },
     insane:  { label: 'Insane',  base: 120,  step: 4,  min: 16 },
   };
-  const DEFAULT_SETTINGS = { speed: 'classic', startLevel: 1, linesPerLevel: 2 };
+  const DEFAULT_SETTINGS = { speed: 'classic', startLevel: 1, linesPerLevel: 2, mode: 'normal' };
+
+  // Game modes (the public rooms 5 and 6 always use SNS and Fast).
+  const MODES = {
+    normal: { label: 'Normal' },
+    sns:    { label: 'SNS', desc: 'Sticks and squares only', short: 'Sticks & squares', types: ['I', 'O'] },
+    fast:   { label: 'Fast', desc: '30% faster', short: '30% faster', speedUp: 1.3 },
+  };
 
   // Special frequencies (percent).
   const SPECIAL_FREQ = { a: 32, c: 18, n: 1, r: 11, s: 3, b: 14, g: 6, q: 6, o: 9 };
@@ -69,7 +76,6 @@
   }
 
   const rand = n => Math.floor(Math.random() * n);
-  const randomType = () => TYPES[rand(TYPES.length)];
   function randomSpecial() {
     let r = Math.random() * 100;
     for (const k in SPECIAL_FREQ) { r -= SPECIAL_FREQ[k]; if (r < 0) return k; }
@@ -136,7 +142,7 @@
       this.tetrises = 0;
       this.level = this.room.settings.startLevel;
       this.piece = null;
-      this.next = randomType();
+      this.next = this.room.randomType();
       this.dropTimer = 0;
       this.flash = 0;              // UI hint: >0 while recently hit by something
       this.flashKind = '';
@@ -146,12 +152,13 @@
 
     get dropInterval() {
       const sp = SPEEDS[this.room.settings.speed] || SPEEDS.classic;
-      return Math.max(sp.min, sp.base - (this.level - 1) * sp.step);
+      const ms = Math.max(sp.min, sp.base - (this.level - 1) * sp.step);
+      return ms / ((MODES[this.room.settings.mode] || MODES.normal).speedUp || 1);
     }
 
     spawn() {
       const type = this.next;
-      this.next = randomType();
+      this.next = this.room.randomType();
       const m = SHAPES[type].rots[0];
       let top = 0;
       while (!m[top].some(Boolean)) top++;
@@ -488,6 +495,10 @@
       return p;
     }
 
+    get mode() { return MODES[this.settings.mode] || MODES.normal; }
+
+    randomType() { const t = this.mode.types || TYPES; return t[rand(t.length)]; }
+
     bySlot(slot) { return this.players.find(p => p.slot === slot); }
 
     opponentsOf(p) {
@@ -507,6 +518,7 @@
       this.winner = null;
       this.lastSync = {};
       this.log('*** The game has started ***', 'system');
+      if (this.mode.desc) this.log(`*** ${this.mode.label}: ${this.mode.desc.toLowerCase()} ***`, 'system');
       this.emit('start');
     }
 
@@ -643,8 +655,8 @@
   }
 
   global.BN = Object.assign(global.BN || {}, {
-    VERSION: '2026.10.11a',   // keep in sync with version.json (used for auto-update)
-    W, H, MAX_INV, COLORS, SHAPES, SPECIAL_INFO, SPECIAL_FREQ, SPEEDS, DEFAULT_SETTINGS,
+    VERSION: '2026.10.11b',   // keep in sync with version.json (used for auto-update)
+    W, H, MAX_INV, COLORS, SHAPES, SPECIAL_INFO, SPECIAL_FREQ, SPEEDS, MODES, DEFAULT_SETTINGS,
     Room, Player, BotBrain, pieceCells, isSpecial, encodeField, decodeField,
   });
 })(window);

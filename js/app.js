@@ -240,6 +240,7 @@
         speed: BN.SPEEDS[g.speed] ? g.speed : 'classic',
         startLevel: Math.max(1, Math.min(99, g.startLevel | 0 || 1)),
         linesPerLevel: Math.max(1, Math.min(20, g.linesPerLevel | 0 || 2)),
+        mode: BN.MODES[g.mode] ? g.mode : 'normal',
       };
     }
 
@@ -340,6 +341,7 @@
       s.on('lobby', l => {
         if (!s.isHost && $('bn-on-join') && !$('bn-on-join').classList.contains('hidden')) openOnline('guest');
         $('bn-code-show').textContent = l.code || s.code;
+        if (s.public) { const md = BN.MODES[l.mode]; $('bn-code-label').textContent = md && md.desc ? `${md.label} · ${md.desc}` : 'Public room'; }
         $('bn-plist').innerHTML = l.players.map(p => `<li>${p.name}${p.host ? ' <em>host</em>' : ''}</li>`).join('')
           + (l.watchers || []).map(n => `<li class="watcher">&#128065; ${n}</li>`).join('');
         const free = MAX_PLAYERS - l.players.length;
@@ -431,7 +433,9 @@
           : r.state === 'playing' ? `<button class="bn-join" data-room="${r.n}" type="button">Join · watch now · ${n}/${max}</button>`
           : `<button class="bn-join" data-room="${r.n}" type="button">${n ? 'Join' : 'Open room'} · ${n}/${max}</button>`;
         const eye = r.watchers ? `<span class="eye">&#128065; ${r.watchers}</span>` : '';
-        return `<div class="bn-rcard"><div class="head"><span class="name">Room ${r.n}</span>${eye}<span class="state ${st[1]}">${st[0]}</span></div><div class="bn-seats">${seats}</div>${btn}</div>`;
+        const md = BN.MODES[r.mode];
+        const mode = md && md.desc ? `<div class="bn-rmode"><b>${md.label}</b> ${md.short}</div>` : '';
+        return `<div class="bn-rcard"><div class="head"><span class="name">Room ${r.n}</span>${eye}<span class="state ${st[1]}">${st[0]}</span></div>${mode}<div class="bn-seats">${seats}</div>${btn}</div>`;
       }).join('');
       const list = d[mpPeriod] || [];
       $('bn-rank-list').innerHTML = list.length ? list.map((p, i) =>
