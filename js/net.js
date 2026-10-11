@@ -37,6 +37,21 @@
   // Names travel between phones and end up in the page, so keep them to safe characters.
   const cleanName = n => (String(n || '').replace(/[^\p{L}\p{N} _.\-]/gu, '').trim().slice(0, 12)) || 'Player';
   const cleanText = t => String(t || '').slice(0, 200);
+  // Round stats from the public-room server (numbers only, names cleaned).
+  const cleanStats = m => {
+    const n = v => Math.max(0, +v || 0);
+    const by = o => Object.fromEntries(Object.entries(o && typeof o === 'object' ? o : {}).map(([k, v]) => [k | 0, n(v)]));
+    const a = m.awards || {};
+    return {
+      ms: n(m.ms),
+      players: m.players.slice(0, 4).map(p => ({
+        slot: p.slot | 0, name: cleanName(p.name), bot: !!p.bot, win: !!p.win, place: p.place | 0, ms: n(p.ms),
+        pieces: n(p.pieces), ppm: n(p.ppm), lines: n(p.lines), tetrises: n(p.tetrises),
+        sent: n(p.sent), used: n(p.used), recv: n(p.recv), by: by(p.by),
+      })),
+      awards: { attacker: a.attacker | 0, fastest: a.fastest | 0, tetris: a.tetris | 0 },
+    };
+  };
   const rid = () => Math.random().toString(36).slice(2, 10);
 
   const params = new URLSearchParams(location.search);
@@ -756,6 +771,7 @@
           });
           break;
         case 'chat': this.emit('chat', { name: m.system ? '' : cleanName(m.name), text: cleanText(m.text), system: !!m.system }); break;
+        case 'stats': if (Array.isArray(m.players)) this.emit('stats', cleanStats(m)); break;
         default: this.emit('game', m);
       }
     }

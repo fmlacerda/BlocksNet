@@ -132,6 +132,8 @@
       this.inv = [];
       this.alive = true;
       this.lines = 0;
+      this.pieces = 0;             // round stats: pieces placed and 4-line clears
+      this.tetrises = 0;
       this.level = this.room.settings.startLevel;
       this.piece = null;
       this.next = randomType();
@@ -211,6 +213,7 @@
       }
       this.piece = null;
       if (overflow) return this.die();
+      this.pieces++;
       this.room.emit('lock', { player: this, hard });
       this.clearLines();
       if (this.alive) this.spawn();
@@ -231,6 +234,7 @@
       if (!cleared) return;
       this.room.emit('clear', { player: this, count: cleared, collected: this.inv.length - invBefore });
       this.lines += cleared;
+      if (cleared >= 4) this.tetrises++;
       const st = this.room.settings;
       this.level = st.startLevel + Math.floor(this.lines / st.linesPerLevel);
       this.room.onLinesCleared(this, cleared);
@@ -521,10 +525,10 @@
         if (p.remote || !p.alive) continue;
         const f = encodeField(p.field);
         const pc = p.piece ? { type: p.piece.type, rot: p.piece.rot, x: p.piece.x, y: p.piece.y } : null;
-        const key = f + JSON.stringify(pc) + p.lines + p.inv.join('');
+        const key = f + JSON.stringify(pc) + p.lines + p.inv.join('') + p.pieces;
         if (this.lastSync[p.slot] === key) continue;
         this.lastSync[p.slot] = key;
-        this.send({ t: 'f', slot: p.slot, f, pc, lines: p.lines, level: p.level, inv: p.inv.join('') });
+        this.send({ t: 'f', slot: p.slot, f, pc, lines: p.lines, level: p.level, inv: p.inv.join(''), pcs: p.pieces, tet: p.tetrises });
       }
     }
 
@@ -619,7 +623,7 @@
     onDeath(p) {
       this.log(`${p.name} has been eliminated`, 'death');
       this.emit('death', p);
-      if (!p.remote) this.send({ t: 'dead', slot: p.slot });
+      if (!p.remote) this.send({ t: 'dead', slot: p.slot, pcs: p.pieces, lines: p.lines, tet: p.tetrises });
       const alive = this.players.filter(o => o.alive);
       const teams = new Set(alive.map(o => o.team || '#' + o.slot));
       if (this.players.length > 1 && teams.size <= 1) this.finish(alive[0] || p);
@@ -639,7 +643,7 @@
   }
 
   global.BN = Object.assign(global.BN || {}, {
-    VERSION: '2026.10.10a',   // keep in sync with version.json (used for auto-update)
+    VERSION: '2026.10.11a',   // keep in sync with version.json (used for auto-update)
     W, H, MAX_INV, COLORS, SHAPES, SPECIAL_INFO, SPECIAL_FREQ, SPEEDS, DEFAULT_SETTINGS,
     Room, Player, BotBrain, pieceCells, isSpecial, encodeField, decodeField,
   });

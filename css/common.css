@@ -201,3 +201,17 @@ button { font: inherit; color: inherit; border: 0; background: none; cursor: poi
   .bn-btn-primary { padding: 10px; }
   .bn-btn-ghost, .bn-back { padding: 2px; }
 }
+/* Round stats card in the Partyline chat (public rooms) */
+.bn-chat .bn-stats { margin: 6px 0; padding: 7px 6px 5px; background: #111723; border: 1px solid #2a3550; border-radius: 9px; font: 11px/15px system-ui, -apple-system, sans-serif; }
+.bn-stats .bn-st-head { font-weight: 800; font-size: 12px; color: var(--accent); margin: 0 2px 4px; display: flex; }
+.bn-stats .bn-st-head span { margin-left: auto; color: var(--dim); font-weight: 700; }
+.bn-stats table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+.bn-stats th, .bn-stats td { padding: 3px 2px; text-align: center; white-space: nowrap; }
+.bn-stats th { color: var(--dim); font-size: 9px; font-weight: 700; text-transform: uppercase; }
+.bn-stats .nm { text-align: left; font-weight: 700; width: 100%; max-width: 0; overflow: hidden; text-overflow: ellipsis; }   /* name takes what's left */
+.bn-stats td.nm i { font-style: normal; color: var(--dim); font-weight: 400; font-size: 9px; }
+.bn-stats tbody tr { border-top: 1px solid #1d2536; }
+.bn-stats tr.you td { background: #2a2410; }
+.bn-stats ul { list-style: none; margin: 5px 2px 0; display: flex; flex-direction: column; gap: 1px; }
+.bn-stats p { margin: 4px 2px 0; color: var(--dim); font-size: 9px; }
+.bn-mp-me small { display: block; margin-top: 2px; }

@@ -277,6 +277,38 @@
       if (atBottom || kind !== 'chat') c.scrollTop = c.scrollHeight;
     }
 
+    // Round stats card (public rooms): the server sends it right after a game ends.
+    function statsCard(st) {
+      const own = room.players.find(p => p.isLocal), mine = own ? own.slot : 0;
+      const name = sl => { const p = st.players.find(x => x.slot === sl); return p ? esc(p.name) : '?'; };
+      const time = ms => { const sec = Math.round(ms / 1000); return `${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, '0')}`; };
+      const place = p => p.win ? '&#127942;' : p.place;
+      const rows = st.players.map(p => `<tr class="${p.slot === mine ? 'you' : ''}"><td>${place(p)}</td><td class="nm">${esc(p.name)}${p.bot ? ' <i>bot</i>' : ''}</td>` +
+        `<td>${time(p.ms)}</td><td>${p.ppm}</td><td>${p.lines}</td><td>${p.tetrises}</td><td>${p.sent}</td><td>${p.used}/${p.recv}</td></tr>`).join('');
+      const aw = [], A = st.awards, P = sl => st.players.find(x => x.slot === sl);
+      if (A.attacker) aw.push(`&#128163; Top attacker: <b>${name(A.attacker)}</b>`);
+      if (A.fastest) aw.push(`&#9889; Fastest: <b>${name(A.fastest)}</b> (${P(A.fastest).ppm} pieces/min)`);
+      if (A.tetris) aw.push(`&#129521; Most tetrises: <b>${name(A.tetris)}</b> (${P(A.tetris).tetrises})`);
+      const me = mine && P(mine);
+      if (me) {
+        const top = Object.entries(me.by).sort((a, b) => b[1] - a[1])[0];
+        if (top && top[1] > 0) aw.push(`&#127919; Hit you most: <b>${name(top[0] | 0)}</b> &times;${top[1]}`);
+      }
+      return `<div class="bn-st-head">&#128202; Round stats <span>${time(st.ms)}</span></div>` +
+        `<table><thead><tr><th></th><th class="nm">Player</th><th>Time</th><th>PPM</th><th>Lines</th><th>4&times;</th><th>Sent</th><th>Spec</th></tr></thead><tbody>${rows}</tbody></table>` +
+        (aw.length ? `<ul>${aw.map(x => `<li>${x}</li>`).join('')}</ul>` : '') +
+        `<p>PPM pieces per minute &middot; 4&times; tetrises &middot; Sent lines sent &middot; Spec specials used/received</p>`;
+    }
+    function roomStats(st) {
+      const c = $('bn-chat');
+      const div = document.createElement('div');
+      div.className = 'bn-stats';
+      div.innerHTML = statsCard(st);
+      c.appendChild(div);
+      while (c.children.length > 200) c.firstChild.remove();
+      c.scrollTop = c.scrollHeight;
+    }
+
     function newSession(kind = 'p2p') {
       $('bn-chat').innerHTML = '';
       if (session) session.close();
@@ -360,6 +392,7 @@
         }
         roomChat('Reconnected. Waiting for the host to start the next game…', 'system');
       });
+      s.on('stats', st => { if (session === s) roomStats(st); });
       s.on('chat', c => {
         const text = c.system ? c.text : `<${c.name}> ${c.text}`;
         room.log(text, c.system ? 'system' : 'chat');
@@ -385,7 +418,9 @@
     function renderMP() {
       const d = mpData, name = readSettings().name;
       const me = d.me;
-      $('bn-mp-me').innerHTML = `Playing as <b>${esc(name)}</b>` + (me ? ` · rank #${me.rank} · ${me.wins} win${me.wins === 1 ? '' : 's'}` : ' · not ranked yet');
+      $('bn-mp-me').innerHTML = `Playing as <b>${esc(name)}</b>` + (me ? ` · rank #${me.rank} · ${me.wins} win${me.wins === 1 ? '' : 's'}` : ' · not ranked yet') +
+        (me && me.stats && me.stats.pieces ? `<small>${me.games} game${me.games === 1 ? '' : 's'} · ${me.stats.lines} lines · ${me.stats.tetrises} tetrises · ` +
+          `${me.stats.ppm} pieces/min${me.stats.bestPpm ? ` (best ${me.stats.bestPpm})` : ''} · ${me.stats.sent} lines sent · ${me.stats.specials} specials used</small>` : '');
       const max = d.maxPlayers || MAX_PLAYERS;
       $('bn-rooms').innerHTML = d.rooms.map(r => {
         const st = { empty: ['Empty', 'st-empty'], waiting: ['Waiting', 'st-wait'], playing: ['Playing', 'st-play'] }[r.state] || ['?', 'st-empty'];

@@ -10,12 +10,17 @@
  * - The server is the referee for the end of a game: it tracks who is still alive and
  *   announces the winner itself, then records the result in the ranking. Games only count
  *   for the ranking when at least two real players took part.
+ * - After each game the server sends everyone in the room the round stats (time survived,
+ *   pieces per minute, lines, tetrises, lines and specials sent/received, awards). Lines and
+ *   specials sent come from the messages it relays; pieces, lines cleared and tetrises are
+ *   counted by each phone and reported with its field updates. Ranked games also add to
+ *   each player's all-time totals.
  * - GET /lobby returns the rooms, the top players (all time and last 7 days) and, with
  *   ?pid=, your own rank.
  */
 import { DurableObject } from 'cloudflare:workers';
 
-const SERVER_VERSION = '2026.10.10a';   // shown on /health, to check which code is deployed
+const SERVER_VERSION = '2026.10.11a';   // shown on /health, to check which code is deployed
 const ROOMS = 6;
 const MAX_PLAYERS = 4;
 const MAX_WATCHERS = 8;
@@ -24,6 +29,8 @@ const PROTO = 1;
 const BOT_NAMES = ['Blockhead', 'LineLord', 'Nukem', 'Gravitas', 'QuakeBot', 'Specialist', 'T-Spin'];
 const SPEEDS = ['relaxed', 'classic', 'fast', 'turbo', 'insane'];
 const GAME_TYPES = ['f', 'lines', 'special', 'dead'];
+const HOSTILE = 'arsbqo';   // specials that hurt the target (same as the game's 'hostile' flag)
+const MIN_SPEED_MS = 30000;   // speed awards and best speed need at least this much play
 const WEEK_MS = 7 * 24 * 3600 * 1000;
 
 const cleanName = n => (String(n || '').replace(/[^\p{L}\p{N} _.\-]/gu, '').trim().slice(0, 12)) || 'Player';
@@ -61,6 +68,10 @@ export class Hub extends DurableObject {
       games INTEGER NOT NULL DEFAULT 0, updated INTEGER NOT NULL DEFAULT 0)`);
     this.sql.exec(`CREATE TABLE IF NOT EXISTS results (pid TEXT NOT NULL, ts INTEGER NOT NULL, win INTEGER NOT NULL)`);
     this.sql.exec(`CREATE INDEX IF NOT EXISTS results_ts ON results (ts)`);
+    // All-time stat totals (added later; ALTER fails harmlessly once the column exists).
+    for (const col of ['pieces', 'lines', 'tetrises', 'sent', 'specials', 'play_ms', 'best_ppm']) {
+      try { this.sql.exec(`ALTER TABLE players ADD COLUMN ${col} INTEGER NOT NULL DEFAULT 0`); } catch (e) { /* exists */ }
+    }
     // clients = seated players (max 4, incl. late joiners waiting for the next game);
     // watchers = spectators beyond the 4 seats.
     this.rooms = Array.from({ length: ROOMS }, (_, i) => ({ n: i + 1, clients: [], watchers: [], hostId: null, game: null }));
@@ -98,11 +109,13 @@ export class Hub extends DurableObject {
       GROUP BY r.pid ORDER BY wins DESC, games ASC LIMIT 10`, Date.now() - WEEK_MS).toArray());
     let me = null;
     if (pid) {
-      const row = this.sql.exec(`SELECT name, wins, games FROM players WHERE pid = ?`, pid).toArray()[0];
+      const row = this.sql.exec(`SELECT name, wins, games, pieces, lines, tetrises, sent, specials, play_ms, best_ppm FROM players WHERE pid = ?`, pid).toArray()[0];
       if (row) {
         const better = this.sql.exec(`SELECT COUNT(*) AS c FROM players WHERE games > 0 AND (wins > ? OR (wins = ? AND games < ?))`,
           row.wins, row.wins, row.games).one().c;
-        me = { name: row.name, wins: row.wins, games: row.games, rank: better + 1 };
+        me = { name: row.name, wins: row.wins, games: row.games, rank: better + 1,
+          stats: { pieces: row.pieces, lines: row.lines, tetrises: row.tetrises, sent: row.sent, specials: row.specials,
+            ppm: row.play_ms ? Math.round(row.pieces / (row.play_ms / 60000)) : 0, bestPpm: row.best_ppm } };
       }
     }
     return { rooms, top, week, me, maxPlayers: MAX_PLAYERS };
@@ -189,7 +202,8 @@ export class Hub extends DurableObject {
     const bots = Math.max(0, Math.min(MAX_PLAYERS - players.length, m.bots | 0));
     const skill = Math.max(0, Math.min(1, +m.skill || 0.5));
     for (let i = 0; i < bots; i++) players.push({ slot: players.length + 1, name: names[i], owner: c.id, bot: true, skill });
-    room.game = { players, settings, alive: new Set(players.map(p => p.slot)), owners: new Map(players.map(p => [p.slot, p.owner])), lastF: new Map(), away: new Map(), started: Date.now() };
+    room.game = { players, settings, alive: new Set(players.map(p => p.slot)), owners: new Map(players.map(p => [p.slot, p.owner])), lastF: new Map(), away: new Map(), started: Date.now(),
+      stats: new Map(players.map(p => [p.slot, { pieces: 0, lines: 0, tet: 0, sent: 0, used: 0, recv: 0, by: {}, died: 0 }])) };
     this.toRoom(room, { t: 'start', players: players.map(({ pid, ...p }) => p), settings });
     this.broadcastLobby(room);
   }
@@ -211,8 +225,57 @@ export class Hub extends DurableObject {
     const slot = m.t === 'f' || m.t === 'dead' ? m.slot : m.from;
     if (g.owners.get(slot) !== c.id) return;            // only for your own players
     if (m.t === 'f') g.lastF.set(slot, m);
+    this.track(g, slot, m);
     this.toRoom(room, m, c);
     if (m.t === 'dead') { g.alive.delete(slot); this.checkEnd(room); }
+  }
+
+  // Round stats, from the messages the server relays anyway.
+  track(g, slot, m) {
+    const st = g.stats.get(slot);
+    if (!st || st.died) return;
+    const count = (v, max) => Math.max(0, Math.min(max, v | 0));
+    if (m.t === 'f' || m.t === 'dead') {
+      // Counted by the phone; capped at what is physically possible.
+      const secs = (Date.now() - g.started) / 1000;
+      st.pieces = Math.max(st.pieces, count(m.pcs, secs * 10 + 5));
+      st.lines = Math.max(st.lines, count(m.lines, st.pieces * 4 + 4));
+      st.tet = Math.max(st.tet, count(m.tet, st.lines / 4));
+    }
+    if (m.t === 'dead') st.died = Date.now();
+    if (m.t === 'lines') st.sent += count(m.n, 4);
+    if (m.t === 'special') {
+      st.used++;
+      const to = g.stats.get(m.to | 0);
+      if (to && (m.to | 0) !== slot) { to.recv++; if (typeof m.s === 'string' && m.s.length === 1 && HOSTILE.includes(m.s)) to.by[slot] = (to.by[slot] || 0) + 1; }
+    }
+  }
+
+  // The stats card everyone in the room sees after a game: winner first, then the
+  // others in reverse order of elimination.
+  roundStats(g, winner) {
+    const now = Date.now();
+    const rows = g.players.map(p => {
+      const st = g.stats.get(p.slot);
+      const ms = Math.max(1000, (st.died || now) - g.started);
+      return {
+        slot: p.slot, name: p.name, bot: !!p.bot, win: p.slot === winner, ms,
+        pieces: st.pieces, ppm: Math.round(st.pieces / (ms / 60000)), lines: st.lines, tetrises: st.tet,
+        sent: st.sent, used: st.used, recv: st.recv, by: st.by, out: st.died || now + (p.slot === winner ? 1 : 0),
+      };
+    }).sort((a, b) => b.out - a.out);
+    rows.forEach((r, i) => { r.place = i + 1; delete r.out; });
+    // Award goes to the single best player (no award on a tie or when nobody scored).
+    const best = (key, among = rows) => {
+      const top = Math.max(0, ...among.map(r => r[key]));
+      const at = among.filter(r => r[key] === top);
+      return top > 0 && at.length === 1 ? at[0].slot : 0;
+    };
+    // Top attacker: lines sent plus specials used on others.
+    rows.forEach(r => { r.attack = r.sent + rows.reduce((n, o) => n + (o.by[r.slot] || 0), 0); });
+    const awards = { attacker: best('attack'), fastest: best('ppm', rows.filter(r => r.ms >= MIN_SPEED_MS)), tetris: best('tetrises') };
+    rows.forEach(r => delete r.attack);
+    return { t: 'stats', ms: now - g.started, players: rows, awards };
   }
 
   // Server is the referee: the game ends when at most one player is left.
@@ -224,7 +287,9 @@ export class Hub extends DurableObject {
     for (const a of g.away.values()) clearTimeout(a.timer);
     room.game = null;
     this.toRoom(room, { t: 'end', winner });
-    this.record(g, winner);
+    const stats = this.roundStats(g, winner);
+    this.toRoom(room, stats);
+    this.record(g, winner, stats);
     this.seatWatchers(room);
     this.broadcastLobby(room);
   }
@@ -241,15 +306,21 @@ export class Hub extends DurableObject {
     }
   }
 
-  record(g, winner) {
+  record(g, winner, stats) {
     const humans = g.players.filter(p => !p.bot && p.pid);
     if (humans.length < 2) return;                      // vs-bots games don't count
     const now = Date.now();
     for (const p of humans) {
       const win = p.slot === winner ? 1 : 0;
-      this.sql.exec(`INSERT INTO players (pid, name, wins, games, updated) VALUES (?, ?, ?, 1, ?)
-        ON CONFLICT(pid) DO UPDATE SET name = excluded.name, wins = wins + excluded.wins, games = games + 1, updated = excluded.updated`,
-        p.pid, p.name, win, now);
+      const r = stats.players.find(x => x.slot === p.slot);
+      const ppm = r.ms >= MIN_SPEED_MS ? r.ppm : 0;     // too short a game for a meaningful speed
+      this.sql.exec(`INSERT INTO players (pid, name, wins, games, updated, pieces, lines, tetrises, sent, specials, play_ms, best_ppm)
+        VALUES (?, ?, ?, 1, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(pid) DO UPDATE SET name = excluded.name, wins = wins + excluded.wins, games = games + 1, updated = excluded.updated,
+          pieces = pieces + excluded.pieces, lines = lines + excluded.lines, tetrises = tetrises + excluded.tetrises,
+          sent = sent + excluded.sent, specials = specials + excluded.specials, play_ms = play_ms + excluded.play_ms,
+          best_ppm = MAX(best_ppm, excluded.best_ppm)`,
+        p.pid, p.name, win, now, r.pieces, r.lines, r.tetrises, r.sent, r.used, r.ms, ppm);
       this.sql.exec(`INSERT INTO results (pid, ts, win) VALUES (?, ?, ?)`, p.pid, now, win);
     }
     this.sql.exec(`DELETE FROM results WHERE ts < ?`, now - 8 * 24 * 3600 * 1000);
@@ -297,7 +368,12 @@ export class Hub extends DurableObject {
     const g = room.game;
     if (!g) return;
     for (const [slot, owner] of g.owners) {
-      if (owner === ownerId && g.alive.has(slot)) { g.alive.delete(slot); this.toRoom(room, { t: 'dead', slot }); }
+      if (owner === ownerId && g.alive.has(slot)) {
+        g.alive.delete(slot);
+        const st = g.stats.get(slot);
+        if (st && !st.died) st.died = Date.now();
+        this.toRoom(room, { t: 'dead', slot });
+      }
     }
   }
 
