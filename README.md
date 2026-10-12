@@ -8,7 +8,9 @@ It is an online block-stacking game for up to 4 players with special attack bloc
 
 ## Play it
 
-**https://fmlacerda.github.io/BlocksNet/**
+**https://rowbusters.com**
+
+A copy also runs on GitHub Pages (https://fmlacerda.github.io/BlocksNet/). Once rowbusters.com is live, that copy sends players there automatically, bringing their saved nickname, settings and ranking identity along (each web address keeps its own saved data). Add `?stay` to the GitHub address to stay on it.
 
 To run it locally there is no build step and there are no dependencies. Serve the repo root and open it on the phone:
 
@@ -93,7 +95,7 @@ These rooms run on a small server, `server/worker.js` (a Cloudflare Worker with 
 - The server checks that each phone only sends messages for its own players, and it decides when a game ends and who won.
 - Results go into the ranking (SQLite in the Durable Object). Only games with at least 2 real players count. Players are identified by nickname plus a random id stored on the phone.
 
-**Deploying:** in Cloudflare, *Workers & Pages → Create → Import a repository →* this repo, and name the Worker `blocksnet`. Cloudflare then redeploys on every push. The live server is `https://blocksnet.fmlacerda.workers.dev`, set in `js/config.js` as `server`. The Multiplayer button only appears once that is set. To test locally, run `npx wrangler dev` and open the game with `?server=http://127.0.0.1:8787`.
+**Deploying:** one Cloudflare Worker (`blocksnet`, created with *Workers & Pages → Create → Import a repository →* this repo) serves both the game files and the server, and Cloudflare redeploys it on every push to `main`. `wrangler.jsonc` sets this up: the repo root is served as static files (minus what `.assetsignore` lists: server code, config, README, docs), and any other request (`/lobby`, `/ws/room/<n>`, `/health`) goes to `server/worker.js`. The domain is attached in the dashboard (*Worker → Settings → Domains & Routes → Add → Custom domain*: `rowbusters.com`, and `www.rowbusters.com`). On rowbusters.com the game talks to its own address; other copies use `https://blocksnet.fmlacerda.workers.dev` (`js/config.js`). To test locally, run `npx wrangler dev` and open `http://127.0.0.1:8787/?server=http://127.0.0.1:8787`.
 
 ## Online multiplayer (private rooms, phone-to-phone)
 

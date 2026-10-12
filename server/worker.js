@@ -24,7 +24,7 @@
  */
 import { DurableObject } from 'cloudflare:workers';
 
-const SERVER_VERSION = '2026.10.12c';   // shown on /health, to check which code is deployed
+const SERVER_VERSION = '2026.10.12d';   // shown on /health, to check which code is deployed
 const ROOMS = 7;
 const MAX_PLAYERS = 4;
 const MAX_WATCHERS = 8;
@@ -59,7 +59,7 @@ export default {
   async fetch(request, env) {
     const url = new URL(request.url);
     if (request.method === 'OPTIONS') return new Response(null, { headers: CORS });
-    if (url.pathname === '/' || url.pathname === '/health') return json({ ok: true, service: 'rowbusters', version: SERVER_VERSION, rooms: ROOMS });
+    if (url.pathname === '/health') return json({ ok: true, service: 'rowbusters', version: SERVER_VERSION, rooms: ROOMS });
     if (url.pathname === '/lobby' || url.pathname.startsWith('/ws/room/')) {
       const hub = env.HUB.get(env.HUB.idFromName('main'));
       return hub.fetch(request);

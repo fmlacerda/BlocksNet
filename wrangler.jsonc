@@ -1,6 +1,9 @@
-// Cloudflare deploy settings for the Rowbusters game server (server/worker.js).
+// Cloudflare deploy settings for Rowbusters (rowbusters.com).
 // Cloudflare "Workers & Pages → Import a repository" reads this file and deploys on every push.
-// The game itself is served by GitHub Pages; this only runs the online rooms and ranking.
+// One Worker serves both the game files (the repo root, minus what .assetsignore lists) and the
+// online rooms and ranking (server/worker.js: /lobby, /ws/room/<n>, /health).
+// rowbusters.com is attached in the dashboard: Worker → Settings → Domains & Routes → Custom domain.
+// (GitHub Pages still serves a copy, which sends players on to rowbusters.com.)
 {
   "$schema": "node_modules/wrangler/config-schema.json",
   // Keep this name: it is the server address (blocksnet.fmlacerda.workers.dev) and the home of
@@ -10,6 +13,9 @@
   "compatibility_date": "2025-09-01",
   "workers_dev": true,
   "preview_urls": false,
+  // Game files. A request that matches a file is served directly; anything else (/lobby,
+  // /ws/room/<n>, /health) goes to server/worker.js.
+  "assets": { "directory": "." },
   "durable_objects": {
     "bindings": [{ "name": "HUB", "class_name": "Hub" }]
   },

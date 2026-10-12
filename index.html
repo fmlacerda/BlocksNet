@@ -14,7 +14,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bungee&family=Space+Grotesk:wght@400;500;600;700&display=swap">
-<link rel="stylesheet" href="css/common.css?v=20261012c">
+<link rel="stylesheet" href="css/common.css?v=20261012d">
 <style>
   /* Portrait layout for up to 4 players: a slim status line on top so the playfield gets
      the space, your field on the left, the 3 opponents stacked on the right, special bar and
@@ -117,6 +117,34 @@
       if (k && k.startsWith('bn.') && localStorage.getItem('rb.' + k.slice(3)) == null) localStorage.setItem('rb.' + k.slice(3), localStorage.getItem(k));
     }
   } catch (e) { /* storage unavailable */ }
+
+  // The game lives at rowbusters.com. Each web address has its own saved data, so the GitHub
+  // Pages copy sends players there with theirs (player id, nickname, settings) in the address
+  // after '#', which never leaves the phone; rowbusters.com stores it and removes it from the
+  // address bar. Only once rowbusters.com runs the game, only from the lobby, and not with ?stay.
+  (function () {
+    const HOME = 'https://rowbusters.com/';
+    const KEYS = ['rb.pid', 'rb.settings', 'rb.muted', 'rb.winlist'];
+    const m = location.hash.match(/^#carry=([A-Za-z0-9_-]+)$/);
+    if (m) {
+      try {
+        const d = JSON.parse(decodeURIComponent(escape(atob(m[1].replace(/-/g, '+').replace(/_/g, '/')))));
+        for (const k of KEYS) if (typeof d[k] === 'string' && localStorage.getItem(k) == null) localStorage.setItem(k, d[k]);
+      } catch (e) { /* bad or no storage */ }
+      history.replaceState(null, '', location.pathname + location.search);
+    }
+    if (!/\.github\.io$/.test(location.hostname) || /[?&](stay|server)\b/.test(location.search)) return;
+    fetch(HOME + 'health', { cache: 'no-store' }).then(r => r.json()).then(h => {
+      if (!h || h.service !== 'rowbusters') return;
+      const app = window.RB && RB.current;
+      if (app && (app.room.running || (app.session && app.session()))) return;   // mid-game or in a room
+      const d = {};
+      try { for (const k of KEYS) { const v = localStorage.getItem(k); if (v != null) d[k] = v; } } catch (e) { /* none */ }
+      const carry = btoa(unescape(encodeURIComponent(JSON.stringify(d)))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+      location.replace(HOME + location.search + '#carry=' + carry);
+    }).catch(() => { /* rowbusters.com not live yet: stay here */ });
+  })();
+
   (function () {
     const set = () => document.documentElement.style.setProperty('--app-h', window.innerHeight + 'px');
     set();
@@ -165,13 +193,13 @@
     <form id="chatForm"><input id="chatIn" placeholder="Say something…" autocomplete="off"><button>Send</button></form>
   </div>
 
-<script src="js/engine.js?v=20261012c"></script>
-<script src="js/render.js?v=20261012c"></script>
-<script src="js/vendor/peerjs.min.js?v=20261012c"></script>
-<script src="js/config.js?v=20261012c"></script>
-<script src="js/net.js?v=20261012c"></script>
-<script src="js/sound.js?v=20261012c"></script>
-<script src="js/app.js?v=20261012c"></script>
+<script src="js/engine.js?v=20261012d"></script>
+<script src="js/render.js?v=20261012d"></script>
+<script src="js/vendor/peerjs.min.js?v=20261012d"></script>
+<script src="js/config.js?v=20261012d"></script>
+<script src="js/net.js?v=20261012d"></script>
+<script src="js/sound.js?v=20261012d"></script>
+<script src="js/app.js?v=20261012d"></script>
 <script>
 (function () {
   const R = RB.render;

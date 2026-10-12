@@ -1,0 +1,12 @@
+# Repo files that are not part of the game: never served on rowbusters.com
+.git
+.github
+.gitignore
+.assetsignore
+.nojekyll
+.wrangler
+node_modules
+server
+wrangler.jsonc
+README.md
+docs
