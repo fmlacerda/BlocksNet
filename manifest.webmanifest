@@ -1,9 +1,9 @@
 {
-  "name": "BlocksNet",
-  "short_name": "BlocksNet",
+  "name": "Rowbusters",
+  "short_name": "Rowbusters",
   "start_url": "index.html",
   "display": "standalone",
-  "background_color": "#0b0d12",
-  "theme_color": "#0b0d12",
+  "background_color": "#160B2E",
+  "theme_color": "#160B2E",
   "icons": [{ "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }]
 }

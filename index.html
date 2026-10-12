@@ -3,15 +3,18 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
-<meta name="theme-color" content="#0b0d12">
+<meta name="theme-color" content="#160B2E">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icon.svg">
 <link rel="apple-touch-icon" href="icon.svg">
-<title>BlocksNet</title>
-<link rel="stylesheet" href="css/common.css?v=20261012b">
+<title>Rowbusters</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bungee&family=Space+Grotesk:wght@400;500;600;700&display=swap">
+<link rel="stylesheet" href="css/common.css?v=20261012c">
 <style>
   /* Portrait layout for up to 4 players: a slim status line on top so the playfield gets
      the space, your field on the left, the 3 opponents stacked on the right, special bar and
@@ -22,15 +25,16 @@
        report 100dvh about one status bar too short, which left an empty band at the bottom. */
     height: var(--app-h, 100dvh);
     padding: var(--safe-t) var(--safe-r) var(--safe-b) var(--safe-l);
-    background: #0b0d12 radial-gradient(120% 60% at 50% 0%, #17203a 0%, transparent 70%);
+    background: var(--bg) radial-gradient(120% 60% at 50% 0%, #2A1660 0%, transparent 70%);
   }
   .bar {
     flex: none; height: 26px; display: flex; align-items: center; gap: 10px;
-    padding: 0 6px 0 10px; border-bottom: 1px solid var(--line); background: #10141c;
+    padding: 0 6px 0 10px; border-bottom: 1px solid var(--line); background: var(--bar);
   }
-  .bar .logo { font: 900 13px "Arial Black", Impact, sans-serif; letter-spacing: -0.3px; }
-  .bar .logo span { color: var(--red); }
-  .bar .stats { flex: 1; display: flex; justify-content: center; gap: 12px; font: 600 11px ui-monospace, Menlo, monospace; color: var(--dim); }
+  .bar .logo { display: flex; align-items: center; gap: 5px; font-size: 12px; }
+  .bar .logo .rb-mark { width: 17px; height: 17px; }
+  .bar .stats { flex: 1; display: flex; justify-content: center; gap: 12px; font: 600 11px var(--font); letter-spacing: .06em; color: var(--dim); }
+  .bar .stats b { font-variant-numeric: tabular-nums; }
   .bar .stats b { color: var(--text); }
   .bar .chat { position: relative; width: 34px; height: 24px; display: grid; place-items: center; font-size: 14px; border-radius: 6px; touch-action: manipulation; }
   .bar .chat.unread::after { content: ""; position: absolute; top: 3px; right: 5px; width: 7px; height: 7px; border-radius: 50%; background: var(--accent); }
@@ -44,10 +48,10 @@
   .opps { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: repeat(3, minmax(0, 1fr)); gap: 4px; }
   .opp { position: relative; display: flex; flex-direction: column; min-height: 0; min-width: 0; border-radius: 4px; touch-action: manipulation; }
   .opp .tag { display: flex; gap: 3px; align-items: baseline; font-size: 10px; line-height: 13px; overflow: hidden; white-space: nowrap; }
-  .opp .tag b { background: var(--blue); color: #fff; border-radius: 3px; padding: 0 3px; }
+  .opp .tag b { background: var(--line-2); color: #fff; border-radius: 3px; padding: 0 3px; }
   .opp .tag em { font-style: normal; color: var(--dim); overflow: hidden; text-overflow: ellipsis; }
   .opp .tag b.tmA { background: #2f7bff; } .opp .tag b.tmB { background: #e0533d; }   /* teams room */
-  .opp.mate .tag em { color: #7dff8a; }
+  .opp.mate .tag em { color: var(--accent); }
   .opp canvas { flex: 1; min-height: 0; }
 
   /* One blink of a coloured border when an opponent hits you with a special. */
@@ -62,17 +66,17 @@
 
   /* Action ticker: the last 3 events, newest at the bottom. Lines slide up and fade as
      newer ones arrive, and fade away on their own after a few seconds. Tap for history. */
-  .log { --lh: 16px; position: relative; flex: 0 0 auto; height: calc(var(--lh) * 3 + 8px); overflow: hidden; background: #07090d; border: 1px solid var(--line); border-radius: 6px; touch-action: manipulation; }
+  .log { --lh: 16px; position: relative; flex: 0 0 auto; height: calc(var(--lh) * 3 + 8px); overflow: hidden; background: var(--well); border: 1px solid var(--line); border-radius: 6px; touch-action: manipulation; }
   .log .ln {
     position: absolute; left: 7px; right: 7px; bottom: 4px; height: var(--lh);
-    font: 600 12px/var(--lh) ui-monospace, Menlo, monospace;
+    font: 600 12.5px/var(--lh) var(--font);
     white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
     transition: transform .45s ease-out, opacity .6s ease-out;
     will-change: transform, opacity;
   }
 
   /* Watching someone else's game: no controls, a bar instead. */
-  .watchbar { display: none; flex: none; align-items: center; gap: 10px; padding: 10px 12px calc(10px + var(--safe-b)); border-top: 1px solid var(--line); background: #10141c; }
+  .watchbar { display: none; flex: none; align-items: center; gap: 10px; padding: 10px 12px calc(10px + var(--safe-b)); border-top: 1px solid var(--line); background: var(--bar); }
   .watchbar span { flex: 1; font-size: 14px; color: var(--dim); }
   .watchbar b { color: var(--text); }
   .watchbar small { display: block; font-size: 11px; }
@@ -82,29 +86,37 @@
   .pad { flex: none; display: flex; flex-direction: column; gap: 6px; padding: 4px 6px 6px; }
   .pad .row { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 6px; }
   .pad button {
-    background: linear-gradient(#2a3040, #1b2030); border: 1px solid #3a4258; border-radius: 12px;
+    background: linear-gradient(#2E1B5E, #1F1240); border: 1px solid var(--line-2); border-radius: 12px; color: var(--text);
     height: var(--btn-h, 64px); font-size: 26px; font-weight: 700; display: flex; align-items: center; justify-content: center;
   }
-  .pad .t { height: 40px; font-size: 16px; background: linear-gradient(#2a2f4a, #1d2138); }
-  .pad .t.self { color: var(--green); }
+  .pad .t { height: 40px; font-size: 16px; background: linear-gradient(#271650, #1C1039); }
+  .pad .t.self { color: var(--accent); }
   .pad .t.dead { opacity: 0.3; }
-  .pad .drop { background: linear-gradient(#c2352c, #8a1d18); border-color: #e3554c; }
-  .pad .rot { background: linear-gradient(#2f5bff, #1a3ab8); border-color: #5b7cff; font-size: 30px; }
+  .pad .drop { background: linear-gradient(#FF2E88, #C41866); border-color: #FF8AC0; color: #fff; }
+  .pad .rot { background: linear-gradient(#C6FF3D, #8FC71C); border-color: #E2FF9A; color: var(--ink); font-size: 30px; }
 
   /* Partyline sheet */
   .party { position: fixed; inset: auto 0 0 0; z-index: 40; height: 55dvh; background: var(--panel); border-top: 1px solid var(--line); border-radius: 16px 16px 0 0; display: flex; flex-direction: column; padding: 10px 12px calc(10px + var(--safe-b)); transform: translateY(105%); transition: transform .25s; }
   .party.open { transform: none; }
   .party h3 { font-size: 14px; display: flex; justify-content: space-between; align-items: center; }
   .party h3 button { font-size: 12px; color: var(--dim); padding: 6px 10px; border: 1px solid var(--line); border-radius: 8px; touch-action: manipulation; }
-  .party .lines { flex: 1; overflow-y: auto; font: 12px/17px ui-monospace, Menlo, monospace; margin: 8px 0; }
+  .party .lines { flex: 1; overflow-y: auto; font: 13px/18px var(--font); margin: 8px 0; }
   .party .lines div { white-space: normal; }
   .party form { display: flex; gap: 6px; }
   .party input { flex: 1; font-size: 16px; padding: 10px; border-radius: 10px; background: var(--panel-2); color: var(--text); border: 1px solid var(--line); -webkit-user-select: text; user-select: text; }
-  .party form button { background: var(--accent); color: #111; font-weight: 700; padding: 0 14px; border-radius: 10px; touch-action: manipulation; }
+  .party form button { background: var(--accent); color: var(--ink); font-weight: 700; padding: 0 14px; border-radius: 10px; touch-action: manipulation; }
 </style>
 </head>
 <body>
 <script>
+  // Saved data (player id, nickname, settings, mute) used to be stored under 'bn.' keys,
+  // before the game was renamed Rowbusters: copy it to the 'rb.' keys once.
+  try {
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      if (k && k.startsWith('bn.') && localStorage.getItem('rb.' + k.slice(3)) == null) localStorage.setItem('rb.' + k.slice(3), localStorage.getItem(k));
+    }
+  } catch (e) { /* storage unavailable */ }
   (function () {
     const set = () => document.documentElement.style.setProperty('--app-h', window.innerHeight + 'px');
     set();
@@ -114,7 +126,7 @@
   })();
 </script>
   <div class="bar">
-    <div class="logo">Blocks<span>Net</span></div>
+    <div class="logo" id="barLogo" role="img" aria-label="Rowbusters"></div>
     <div class="stats"><span>LINES <b id="lines">0</b></span><span>LEVEL <b id="level">1</b></span></div>
     <button class="chat" id="muteBtn" aria-label="Sound on/off">&#128264;</button>
     <button class="chat" id="partyBtn" aria-label="Partyline chat">&#128172;</button>
@@ -153,17 +165,18 @@
     <form id="chatForm"><input id="chatIn" placeholder="Say something…" autocomplete="off"><button>Send</button></form>
   </div>
 
-<script src="js/engine.js?v=20261012b"></script>
-<script src="js/render.js?v=20261012b"></script>
-<script src="js/vendor/peerjs.min.js?v=20261012b"></script>
-<script src="js/config.js?v=20261012b"></script>
-<script src="js/net.js?v=20261012b"></script>
-<script src="js/sound.js?v=20261012b"></script>
-<script src="js/app.js?v=20261012b"></script>
+<script src="js/engine.js?v=20261012c"></script>
+<script src="js/render.js?v=20261012c"></script>
+<script src="js/vendor/peerjs.min.js?v=20261012c"></script>
+<script src="js/config.js?v=20261012c"></script>
+<script src="js/net.js?v=20261012c"></script>
+<script src="js/sound.js?v=20261012c"></script>
+<script src="js/app.js?v=20261012c"></script>
 <script>
 (function () {
-  const R = BN.render;
+  const R = RB.render;
   const $ = id => document.getElementById(id);
+  $('barLogo').innerHTML = RB.LOGO;
   let oppEls = [];
   const logLines = [];
 
@@ -243,19 +256,19 @@
     if (e.kind === 'chat' && !$('party').classList.contains('open')) $('partyBtn').classList.add('unread');
   }
 
-  const app = BN.app({
+  const app = RB.app({
     title: 'Up to 4 players',
     orientation: 'portrait',
     subtitle: 'Buttons to move, rotate and drop. Number buttons 1–4 fire your first special at that player, D discards it. You can also tap an opponent field to target it.',
     onSetup: buildOpps,
     render(app) {
       const me = app.me;
-      R.drawField($('meCanvas'), me, { grid: true, frame: '#3a4258', valign: 'top', inv: me.inv });
+      R.drawField($('meCanvas'), me, { grid: true, frame: '#3D2870', valign: 'top', inv: me.inv });
       R.drawNext($('next'), app.watching ? null : me.next);
       if (app.watching) $('watchName').textContent = me.name;
       $('lines').textContent = me.lines;
       $('level').textContent = me.level;
-      for (const o of oppEls) R.drawField(o.canvas, o.p, { valign: 'top', highlight: me.inv.length && o.p.alive ? 'rgba(255,204,51,.6)' : null });
+      for (const o of oppEls) R.drawField(o.canvas, o.p, { valign: 'top', highlight: me.inv.length && o.p.alive ? 'rgba(198,255,61,.6)' : null });
       document.querySelectorAll('#targets .t[data-slot]').forEach(b => {
         const p = app.room.bySlot(+b.dataset.slot);
         b.classList.toggle('dead', !p || !p.alive);
@@ -274,7 +287,7 @@
     el.classList.add('hit');
   }
   app.room.on('special', e => {
-    const color = BN.SPECIAL_INFO[e.special].color;
+    const color = RB.SPECIAL_INFO[e.special].color;
     if (e.target === app.me) { if (e.from !== app.me) blink(document.querySelector('.me'), color); }
     else { const o = oppEls.find(x => x.p === e.target); if (o) blink(o.el, color); }
   });
@@ -308,8 +321,8 @@
   app.bindHold($('bRot'), app.act.rotate, { repeat: false });
   app.bindHold($('bDrop'), app.act.drop, { repeat: false });
 
-  const showMute = () => { $('muteBtn').innerHTML = BN.sound.muted ? '&#128263;' : '&#128264;'; $('muteBtn').setAttribute('aria-pressed', BN.sound.muted); };
-  $('muteBtn').addEventListener('click', () => { BN.sound.setMuted(!BN.sound.muted); showMute(); BN.sound.play('rotate'); });
+  const showMute = () => { $('muteBtn').innerHTML = RB.sound.muted ? '&#128263;' : '&#128264;'; $('muteBtn').setAttribute('aria-pressed', RB.sound.muted); };
+  $('muteBtn').addEventListener('click', () => { RB.sound.setMuted(!RB.sound.muted); showMute(); RB.sound.play('rotate'); });
   showMute();
   $('log').addEventListener('click', () => $('partyBtn').click());
   $('watchLeave').addEventListener('click', () => app.leaveWatch());

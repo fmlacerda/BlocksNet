@@ -1,5 +1,5 @@
 /*
- * BlocksNet game server (Cloudflare Worker + one Durable Object).
+ * Rowbusters game server (Cloudflare Worker + one Durable Object).
  *
  * - Seven public rooms (1-7), up to 4 players each. Rooms 1, 2 and 4 play normal games, room 5 is
  *   SNS (sticks and squares only) and room 6 is Fast (30% faster); room 3 is Teams (2 vs 2:
@@ -15,8 +15,8 @@
  *   announces the winner itself, then records the result in the ranking. Games only count
  *   for the ranking when at least two real players took part.
  * - After each game the server sends everyone in the room the round stats (time survived,
- *   pieces per minute, lines, tetrises, lines and specials sent/received, awards). Lines and
- *   specials sent come from the messages it relays; pieces, lines cleared and tetrises are
+ *   pieces per minute, lines, rowbusts (4 lines at once), lines and specials sent/received, awards). Lines and
+ *   specials sent come from the messages it relays; pieces, lines cleared and rowbusts are
  *   counted by each phone and reported with its field updates. Ranked games also add to
  *   each player's all-time totals.
  * - GET /lobby returns the rooms, the top players (all time and last 7 days) and, with
@@ -24,7 +24,7 @@
  */
 import { DurableObject } from 'cloudflare:workers';
 
-const SERVER_VERSION = '2026.10.12b';   // shown on /health, to check which code is deployed
+const SERVER_VERSION = '2026.10.12c';   // shown on /health, to check which code is deployed
 const ROOMS = 7;
 const MAX_PLAYERS = 4;
 const MAX_WATCHERS = 8;
@@ -59,7 +59,7 @@ export default {
   async fetch(request, env) {
     const url = new URL(request.url);
     if (request.method === 'OPTIONS') return new Response(null, { headers: CORS });
-    if (url.pathname === '/' || url.pathname === '/health') return json({ ok: true, service: 'blocksnet', version: SERVER_VERSION, rooms: ROOMS });
+    if (url.pathname === '/' || url.pathname === '/health') return json({ ok: true, service: 'rowbusters', version: SERVER_VERSION, rooms: ROOMS });
     if (url.pathname === '/lobby' || url.pathname.startsWith('/ws/room/')) {
       const hub = env.HUB.get(env.HUB.idFromName('main'));
       return hub.fetch(request);
@@ -78,7 +78,8 @@ export class Hub extends DurableObject {
     this.sql.exec(`CREATE TABLE IF NOT EXISTS results (pid TEXT NOT NULL, ts INTEGER NOT NULL, win INTEGER NOT NULL)`);
     this.sql.exec(`CREATE INDEX IF NOT EXISTS results_ts ON results (ts)`);
     // All-time stat totals (added later; ALTER fails harmlessly once the column exists).
-    for (const col of ['pieces', 'lines', 'tetrises', 'sent', 'specials', 'play_ms', 'best_ppm']) {
+    try { this.sql.exec(`ALTER TABLE players RENAME COLUMN tetrises TO busts`); } catch (e) { /* new or already renamed */ }
+    for (const col of ['pieces', 'lines', 'busts', 'sent', 'specials', 'play_ms', 'best_ppm']) {
       try { this.sql.exec(`ALTER TABLE players ADD COLUMN ${col} INTEGER NOT NULL DEFAULT 0`); } catch (e) { /* exists */ }
     }
     // clients = seated players (max 4, incl. late joiners waiting for the next game);
@@ -119,12 +120,12 @@ export class Hub extends DurableObject {
       GROUP BY r.pid ORDER BY wins DESC, games ASC LIMIT 10`, Date.now() - WEEK_MS).toArray());
     let me = null;
     if (pid) {
-      const row = this.sql.exec(`SELECT name, wins, games, pieces, lines, tetrises, sent, specials, play_ms, best_ppm FROM players WHERE pid = ?`, pid).toArray()[0];
+      const row = this.sql.exec(`SELECT name, wins, games, pieces, lines, busts, sent, specials, play_ms, best_ppm FROM players WHERE pid = ?`, pid).toArray()[0];
       if (row) {
         const better = this.sql.exec(`SELECT COUNT(*) AS c FROM players WHERE games > 0 AND (wins > ? OR (wins = ? AND games < ?))`,
           row.wins, row.wins, row.games).one().c;
         me = { name: row.name, wins: row.wins, games: row.games, rank: better + 1,
-          stats: { pieces: row.pieces, lines: row.lines, tetrises: row.tetrises, sent: row.sent, specials: row.specials,
+          stats: { pieces: row.pieces, lines: row.lines, busts: row.busts, sent: row.sent, specials: row.specials,
             ppm: row.play_ms ? Math.round(row.pieces / (row.play_ms / 60000)) : 0, bestPpm: row.best_ppm } };
       }
     }
@@ -157,7 +158,7 @@ export class Hub extends DurableObject {
     if (m.t === 'ping') { this.send(c, { t: 'ping' }); return; }
     if (!c.joined) {
       if (m.t !== 'hello') return;
-      if (m.v !== PROTO) { this.send(c, { t: 'reject', reason: 'This version of BlocksNet is out of date. Reload the page.' }); c.ws.close(1000); return; }
+      if (m.v !== PROTO) { this.send(c, { t: 'reject', reason: 'This version of Rowbusters is out of date. Reload the page.' }); c.ws.close(1000); return; }
       c.name = cleanName(m.name);
       c.pid = cleanPid(m.pid) || c.id;
       // Same player coming back (e.g. after a dropped connection): replace the old link.
@@ -247,7 +248,7 @@ export class Hub extends DurableObject {
     }
     players.forEach((p, i) => { p.slot = i + 1; });
     room.game = { players, settings, alive: new Set(players.map(p => p.slot)), owners: new Map(players.map(p => [p.slot, p.owner])), lastF: new Map(), away: new Map(), started: Date.now(),
-      stats: new Map(players.map(p => [p.slot, { pieces: 0, lines: 0, tet: 0, sent: 0, used: 0, recv: 0, by: {}, died: 0 }])) };
+      stats: new Map(players.map(p => [p.slot, { pieces: 0, lines: 0, busts: 0, sent: 0, used: 0, recv: 0, by: {}, died: 0 }])) };
     this.toRoom(room, { t: 'start', players: players.map(({ pid, ...p }) => p), settings });
     this.broadcastLobby(room);
   }
@@ -285,7 +286,7 @@ export class Hub extends DurableObject {
       const secs = (Date.now() - g.started) / 1000;
       st.pieces = Math.max(st.pieces, count(m.pcs, secs * 10 + 5));
       st.lines = Math.max(st.lines, count(m.lines, st.pieces * 4 + 4));
-      st.tet = Math.max(st.tet, count(m.tet, st.lines / 4));
+      st.busts = Math.max(st.busts, count(m.bust, st.lines / 4));
     }
     if (m.t === 'dead') st.died = Date.now();
     if (m.t === 'lines') st.sent += count(m.n, 4);
@@ -305,7 +306,7 @@ export class Hub extends DurableObject {
       const ms = Math.max(1000, (st.died || now) - g.started);
       return {
         slot: p.slot, name: p.name, bot: !!p.bot, team: p.team || '', win: winTeam ? p.team === winTeam : p.slot === winner, ms,
-        pieces: st.pieces, ppm: Math.round(st.pieces / (ms / 60000)), lines: st.lines, tetrises: st.tet,
+        pieces: st.pieces, ppm: Math.round(st.pieces / (ms / 60000)), lines: st.lines, busts: st.busts,
         sent: st.sent, used: st.used, recv: st.recv, by: st.by, out: st.died || now + (p.slot === winner ? 1 : 0),
       };
     }).sort((a, b) => (b.win - a.win) || (b.out - a.out));
@@ -318,7 +319,7 @@ export class Hub extends DurableObject {
     };
     // Top attacker: lines sent plus specials used on others.
     rows.forEach(r => { r.attack = r.sent + rows.reduce((n, o) => n + (o.by[r.slot] || 0), 0); });
-    const awards = { attacker: best('attack'), fastest: best('ppm', rows.filter(r => r.ms >= MIN_SPEED_MS)), tetris: best('tetrises') };
+    const awards = { attacker: best('attack'), fastest: best('ppm', rows.filter(r => r.ms >= MIN_SPEED_MS)), busts: best('busts') };
     rows.forEach(r => delete r.attack);
     return { t: 'stats', ms: now - g.started, players: rows, awards };
   }
@@ -364,13 +365,13 @@ export class Hub extends DurableObject {
       const win = (winTeam ? p.team === winTeam : p.slot === winner) ? 1 : 0;
       const r = stats.players.find(x => x.slot === p.slot);
       const ppm = r.ms >= MIN_SPEED_MS ? r.ppm : 0;     // too short a game for a meaningful speed
-      this.sql.exec(`INSERT INTO players (pid, name, wins, games, updated, pieces, lines, tetrises, sent, specials, play_ms, best_ppm)
+      this.sql.exec(`INSERT INTO players (pid, name, wins, games, updated, pieces, lines, busts, sent, specials, play_ms, best_ppm)
         VALUES (?, ?, ?, 1, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(pid) DO UPDATE SET name = excluded.name, wins = wins + excluded.wins, games = games + 1, updated = excluded.updated,
-          pieces = pieces + excluded.pieces, lines = lines + excluded.lines, tetrises = tetrises + excluded.tetrises,
+          pieces = pieces + excluded.pieces, lines = lines + excluded.lines, busts = busts + excluded.busts,
           sent = sent + excluded.sent, specials = specials + excluded.specials, play_ms = play_ms + excluded.play_ms,
           best_ppm = MAX(best_ppm, excluded.best_ppm)`,
-        p.pid, p.name, win, now, r.pieces, r.lines, r.tetrises, r.sent, r.used, r.ms, ppm);
+        p.pid, p.name, win, now, r.pieces, r.lines, r.busts, r.sent, r.used, r.ms, ppm);
       this.sql.exec(`INSERT INTO results (pid, ts, win) VALUES (?, ?, ?)`, p.pid, now, win);
     }
     this.sql.exec(`DELETE FROM results WHERE ts < ?`, now - 8 * 24 * 3600 * 1000);

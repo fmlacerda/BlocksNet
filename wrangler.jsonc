@@ -1,8 +1,10 @@
-// Cloudflare deploy settings for the BlocksNet game server (server/worker.js).
+// Cloudflare deploy settings for the Rowbusters game server (server/worker.js).
 // Cloudflare "Workers & Pages → Import a repository" reads this file and deploys on every push.
 // The game itself is served by GitHub Pages; this only runs the online rooms and ranking.
 {
   "$schema": "node_modules/wrangler/config-schema.json",
+  // Keep this name: it is the server address (blocksnet.fmlacerda.workers.dev) and the home of
+  // the ranking database; a new name would deploy a separate, empty server.
   "name": "blocksnet",
   "main": "server/worker.js",
   "compatibility_date": "2025-09-01",

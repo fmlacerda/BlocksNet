@@ -1,5 +1,5 @@
 /*
- * BlocksNet game engine (study prototype).
+ * Rowbusters game engine (study prototype).
  *
  * Rules:
  *  - 12x22 playfield, up to 6 players, free-for-all or teams.
@@ -140,8 +140,8 @@
       this.inv = [];
       this.alive = true;
       this.lines = 0;
-      this.pieces = 0;             // round stats: pieces placed and 4-line clears
-      this.tetrises = 0;
+      this.pieces = 0;             // round stats: pieces placed and rowbusts (4-line clears)
+      this.busts = 0;
       this.level = this.room.settings.startLevel;
       this.piece = null;
       this.next = this.room.randomType();
@@ -243,7 +243,7 @@
       if (!cleared) return;
       this.room.emit('clear', { player: this, count: cleared, collected: this.inv.length - invBefore });
       this.lines += cleared;
-      if (cleared >= 4) this.tetrises++;
+      if (cleared >= 4) this.busts++;   // a rowbust: 4 lines at once
       const st = this.room.settings;
       this.level = st.startLevel + Math.floor(this.lines / st.linesPerLevel);
       this.room.onLinesCleared(this, cleared);
@@ -542,7 +542,7 @@
         const key = f + JSON.stringify(pc) + p.lines + p.inv.join('') + p.pieces;
         if (this.lastSync[p.slot] === key) continue;
         this.lastSync[p.slot] = key;
-        this.send({ t: 'f', slot: p.slot, f, pc, lines: p.lines, level: p.level, inv: p.inv.join(''), pcs: p.pieces, tet: p.tetrises });
+        this.send({ t: 'f', slot: p.slot, f, pc, lines: p.lines, level: p.level, inv: p.inv.join(''), pcs: p.pieces, bust: p.busts });
       }
     }
 
@@ -637,7 +637,7 @@
     onDeath(p) {
       this.log(`${p.name} has been eliminated`, 'death');
       this.emit('death', p);
-      if (!p.remote) this.send({ t: 'dead', slot: p.slot, pcs: p.pieces, lines: p.lines, tet: p.tetrises });
+      if (!p.remote) this.send({ t: 'dead', slot: p.slot, pcs: p.pieces, lines: p.lines, bust: p.busts });
       const alive = this.players.filter(o => o.alive);
       const teams = new Set(alive.map(o => o.team || '#' + o.slot));
       if (this.players.length > 1 && teams.size <= 1) this.finish(alive[0] || p);
@@ -656,8 +656,8 @@
     }
   }
 
-  global.BN = Object.assign(global.BN || {}, {
-    VERSION: '2026.10.12b',   // keep in sync with version.json (used for auto-update)
+  global.RB = Object.assign(global.RB || {}, {
+    VERSION: '2026.10.12c',   // keep in sync with version.json (used for auto-update)
     W, H, MAX_INV, COLORS, SHAPES, SPECIAL_INFO, SPECIAL_FREQ, SPEEDS, MODES, DEFAULT_SETTINGS,
     Room, Player, BotBrain, pieceCells, isSpecial, encodeField, decodeField,
   });

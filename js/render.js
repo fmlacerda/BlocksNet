@@ -1,7 +1,7 @@
-/* Canvas rendering for BlocksNet fields, next-piece box and the special bar. */
-(function (BN) {
+/* Canvas rendering for Rowbusters fields, next-piece box and the special bar. */
+(function (RB) {
   'use strict';
-  const { W, H, COLORS, SHAPES, SPECIAL_INFO, isSpecial, pieceCells } = BN;
+  const { W, H, COLORS, SHAPES, SPECIAL_INFO, isSpecial, pieceCells } = RB;
 
   const shade = (hex, amt) => {
     const n = parseInt(hex.slice(1), 16);
@@ -62,11 +62,11 @@
     const ox = Math.floor((w - s * W) / 2);
     const oy = opts.valign === 'top' ? 0 : opts.valign === 'bottom' ? Math.floor(h - s * H) : Math.floor((h - s * H) / 2);
     ctx.clearRect(0, 0, w, h);
-    ctx.fillStyle = opts.bg || '#05070c';
+    ctx.fillStyle = opts.bg || '#10071F';
     ctx.fillRect(ox, oy, s * W, s * H);
 
     if (opts.grid && s >= 8) {
-      ctx.strokeStyle = 'rgba(255,255,255,0.045)';
+      ctx.strokeStyle = 'rgba(196,184,227,0.06)';
       ctx.lineWidth = 1;
       ctx.beginPath();
       for (let x = 1; x < W; x++) { ctx.moveTo(ox + x * s + 0.5, oy); ctx.lineTo(ox + x * s + 0.5, oy + H * s); }
@@ -200,7 +200,7 @@
   }
 
   // Inventory as a row of special tiles; first one is the one that will be used.
-  function drawSpecials(canvas, inv, slots = BN.MAX_INV) {
+  function drawSpecials(canvas, inv, slots = RB.MAX_INV) {
     const { ctx, w, h } = fit(canvas);
     ctx.clearRect(0, 0, w, h);
     const s = Math.min(h, w / slots);
@@ -216,5 +216,5 @@
     }
   }
 
-  BN.render = { fit, drawBlock, drawField, drawNext, drawSpecials };
-})(window.BN);
+  RB.render = { fit, drawBlock, drawField, drawNext, drawSpecials };
+})(window.RB);

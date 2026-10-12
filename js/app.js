@@ -3,12 +3,12 @@
  * buttons, winlist and haptics. Each layout only supplies a render() function
  * and wires its own touch controls to `app.act`.
  */
-(function (BN) {
+(function (RB) {
   'use strict';
 
   const store = {
-    get(k, d) { try { const v = localStorage.getItem('bn.' + k); return v == null ? d : JSON.parse(v); } catch (e) { return d; } },
-    set(k, v) { try { localStorage.setItem('bn.' + k, JSON.stringify(v)); } catch (e) { /* storage unavailable */ } },
+    get(k, d) { try { const v = localStorage.getItem('rb.' + k); return v == null ? d : JSON.parse(v); } catch (e) { return d; } },
+    set(k, v) { try { localStorage.setItem('rb.' + k, JSON.stringify(v)); } catch (e) { /* storage unavailable */ } },
   };
 
   const BOT_NAMES = ['Blockhead', 'LineLord', 'Nukem', 'Gravitas', 'QuakeBot', 'Specialist', 'T-Spin'];
@@ -60,121 +60,132 @@
     el.addEventListener('contextmenu', e => e.preventDefault());
   }
 
+  // Rowbusters logo: the mark (a row of blocks bursting apart) and the wordmark.
+  const MARK = `<svg class="rb-mark" viewBox="0 0 120 120" aria-hidden="true">
+    <g fill="#FF2E88"><rect x="10" y="10" width="22" height="22" rx="3" opacity=".45"/><rect x="62" y="10" width="22" height="22" rx="3" opacity=".45"/>
+    <rect x="10" y="88" width="22" height="22" rx="3"/><rect x="36" y="88" width="22" height="22" rx="3"/><rect x="62" y="88" width="22" height="22" rx="3"/><rect x="88" y="88" width="22" height="22" rx="3"/></g>
+    <g fill="#C6FF3D"><rect x="2" y="50" width="22" height="22" rx="3" transform="rotate(-16 13 61)"/><rect x="34" y="42" width="22" height="22" rx="3" transform="rotate(8 45 53)"/>
+    <rect x="64" y="54" width="22" height="22" rx="3" transform="rotate(-6 75 65)"/><rect x="96" y="44" width="22" height="22" rx="3" transform="rotate(18 107 55)"/>
+    <rect x="56" y="36" width="6" height="6" rx="1"/><rect x="88" y="36" width="5" height="5" rx="1"/><rect x="26" y="78" width="5" height="5" rx="1"/><rect x="112" y="74" width="6" height="6" rx="1"/></g></svg>`;
+  const LOGO = `<span class="rb-mark-wrap">${MARK}</span><span class="rb-word"><b>ROW</b>BUSTERS</span>`;
+  RB.LOGO = LOGO;
+
   function lobbyHTML(title, subtitle) {
     const s = Object.assign({}, DEFAULTS, store.get('settings', {}));
     s.bots = Math.max(1, Math.min(MAX_PLAYERS - 1, s.bots | 0));
     const opt = (list, cur, label = v => v) => list.map(v => `<option value="${v}" ${v === cur ? 'selected' : ''}>${label(v)}</option>`).join('');
     const fsRow = fsSupported
-      ? `<label class="bn-check"><input type="checkbox" id="bn-fs" ${s.fullscreen ? 'checked' : ''}> Play fullscreen</label>`
-      : (isIOS && !isStandalone() ? `<p class="bn-hint bn-fs-hint">For full screen on iPhone: Share &rarr; <b>Add to Home Screen</b>, then open BlocksNet from the icon.</p>` : '');
+      ? `<label class="rb-check"><input type="checkbox" id="rb-fs" ${s.fullscreen ? 'checked' : ''}> Play fullscreen</label>`
+      : (isIOS && !isStandalone() ? `<p class="rb-hint rb-fs-hint">For full screen on iPhone: Share &rarr; <b>Add to Home Screen</b>, then open Rowbusters from the icon.</p>` : '');
     return `
-      <div class="bn-overlay" id="bn-lobby">
-        <div class="bn-panel">
-          <div class="bn-logo">Blocks<span>Net</span></div>
-          <div class="bn-sub">${title}</div>
-          <p class="bn-hint">${subtitle}</p>
-          <label>Nickname<input id="bn-name" maxlength="12" value="${String(s.name).replace(/"/g, '')}" autocomplete="off"></label>
-          <div class="bn-row">
-            <label>Opponents<select id="bn-bots">${[1, 2, 3].map(n => `<option ${n === s.bots ? 'selected' : ''}>${n}</option>`).join('')}</select></label>
-            <label>Bot skill<select id="bn-skill">${opt(Object.keys(SKILLS), s.skill)}</select></label>
+      <div class="rb-overlay" id="rb-lobby">
+        <div class="rb-panel">
+          <div class="rb-logo" role="img" aria-label="Rowbusters">${LOGO}</div>
+          <div class="rb-tagline">Clear lines. Send trouble.</div>
+          <div class="rb-sub">${title}</div>
+          <p class="rb-hint">${subtitle}</p>
+          <label>Nickname<input id="rb-name" maxlength="12" value="${String(s.name).replace(/"/g, '')}" autocomplete="off"></label>
+          <div class="rb-row">
+            <label>Opponents<select id="rb-bots">${[1, 2, 3].map(n => `<option ${n === s.bots ? 'selected' : ''}>${n}</option>`).join('')}</select></label>
+            <label>Bot skill<select id="rb-skill">${opt(Object.keys(SKILLS), s.skill)}</select></label>
           </div>
-          <div class="bn-row">
-            <label>Speed<select id="bn-speed">${opt(Object.keys(BN.SPEEDS), s.speed, k => BN.SPEEDS[k].label)}</select></label>
-            <label>Start level<select id="bn-level">${opt(START_LEVELS, s.startLevel)}</select></label>
-            <label>Level up<select id="bn-lpl">${opt(LINES_PER_LEVEL, s.linesPerLevel, n => `${n} line${n > 1 ? 's' : ''}`)}</select></label>
+          <div class="rb-row">
+            <label>Speed<select id="rb-speed">${opt(Object.keys(RB.SPEEDS), s.speed, k => RB.SPEEDS[k].label)}</select></label>
+            <label>Start level<select id="rb-level">${opt(START_LEVELS, s.startLevel)}</select></label>
+            <label>Level up<select id="rb-lpl">${opt(LINES_PER_LEVEL, s.linesPerLevel, n => `${n} line${n > 1 ? 's' : ''}`)}</select></label>
           </div>
           ${fsRow}
-          <div class="bn-sound-test"><button class="bn-btn-ghost" id="bn-test-sound" type="button">&#128266; Test sound</button><span id="bn-sound-status"></span></div>
-          <p class="bn-status error" id="bn-lobby-msg"></p>
-          <button class="bn-btn-primary" id="bn-start">Play vs bots</button>
-          ${BN.net ? `<div class="bn-divider"><span>or play online</span></div>
-          ${BN.net.serverURL() ? '<button class="bn-btn-secondary bn-mp-btn" id="bn-mp-open" type="button">Multiplayer · public rooms</button>' : ''}
-          <div class="bn-row bn-private-row">
-            <button class="bn-btn-secondary" id="bn-host">${BN.net.serverURL() ? 'Private room' : 'Host a room'}</button>
-            <button class="bn-btn-secondary" id="bn-join-open">${BN.net.serverURL() ? 'Join with code' : 'Join a room'}</button>
+          <div class="rb-sound-test"><button class="rb-btn-ghost" id="rb-test-sound" type="button">&#128266; Test sound</button><span id="rb-sound-status"></span></div>
+          <p class="rb-status error" id="rb-lobby-msg"></p>
+          <button class="rb-btn-primary" id="rb-start">Play vs bots</button>
+          ${RB.net ? `<div class="rb-divider"><span>or play online</span></div>
+          ${RB.net.serverURL() ? '<button class="rb-btn-secondary rb-mp-btn" id="rb-mp-open" type="button">Multiplayer · public rooms</button>' : ''}
+          <div class="rb-row rb-private-row">
+            <button class="rb-btn-secondary" id="rb-host">${RB.net.serverURL() ? 'Private room' : 'Host a room'}</button>
+            <button class="rb-btn-secondary" id="rb-join-open">${RB.net.serverURL() ? 'Join with code' : 'Join a room'}</button>
           </div>` : ''}
-          <p class="bn-version">v${BN.VERSION}${BN.net ? ' · <button class="bn-linkbtn" id="bn-diag-open" type="button">connection details</button>' : ''}</p>
+          <p class="rb-version">v${RB.VERSION}${RB.net ? ' · <button class="rb-linkbtn" id="rb-diag-open" type="button">connection details</button>' : ''}</p>
         </div>
       </div>
-      <div class="bn-overlay hidden" id="bn-mp">
-        <div class="bn-panel bn-mp-panel">
-          <div class="bn-mp-top"><div class="bn-logo">Blocks<span>Net</span></div><span>Multiplayer</span></div>
-          <div class="bn-mp-me" id="bn-mp-me">Loading…</div>
-          <p class="bn-status error" id="bn-mp-msg"></p>
-          <div class="bn-h2">Rooms</div>
-          <div class="bn-rooms" id="bn-rooms"></div>
-          <div class="bn-h2">Top players</div>
-          <div class="bn-rank">
-            <div class="bn-period"><button class="on" data-period="top" type="button">All time</button><button data-period="week" type="button">This week</button></div>
-            <ol id="bn-rank-list"></ol>
-            <p class="bn-hint bn-rank-note">Games with 2 or more real players count. The server decides the winner.</p>
+      <div class="rb-overlay hidden" id="rb-mp">
+        <div class="rb-panel rb-mp-panel">
+          <div class="rb-mp-top"><div class="rb-logo" role="img" aria-label="Rowbusters">${LOGO}</div><span>Multiplayer</span></div>
+          <div class="rb-mp-me" id="rb-mp-me">Loading…</div>
+          <p class="rb-status error" id="rb-mp-msg"></p>
+          <div class="rb-h2">Rooms</div>
+          <div class="rb-rooms" id="rb-rooms"></div>
+          <div class="rb-h2">Top players</div>
+          <div class="rb-rank">
+            <div class="rb-period"><button class="on" data-period="top" type="button">All time</button><button data-period="week" type="button">This week</button></div>
+            <ol id="rb-rank-list"></ol>
+            <p class="rb-hint rb-rank-note">Games with 2 or more real players count. The server decides the winner.</p>
           </div>
-          <button class="bn-btn-ghost" id="bn-mp-back" type="button">&larr; Back</button>
+          <button class="rb-btn-ghost" id="rb-mp-back" type="button">&larr; Back</button>
         </div>
       </div>
-      <div class="bn-overlay hidden" id="bn-online">
-        <div class="bn-panel" id="bn-on-panel">
-          <div class="bn-logo bn-on-logo">Blocks<span>Net</span></div>
-          <div class="bn-sub" id="bn-on-title">Online room</div>
-          <div id="bn-on-join" class="bn-stack hidden">
-            <label>Your nickname<input id="bn-join-name" maxlength="12" autocomplete="off"></label>
-            <label>Room code<input id="bn-code" maxlength="5" autocapitalize="characters" autocomplete="off" spellcheck="false" placeholder="ABCDE"></label>
-            <button class="bn-btn-primary" id="bn-join">Join</button>
+      <div class="rb-overlay hidden" id="rb-online">
+        <div class="rb-panel" id="rb-on-panel">
+          <div class="rb-logo rb-on-logo" role="img" aria-label="Rowbusters">${LOGO}</div>
+          <div class="rb-sub" id="rb-on-title">Online room</div>
+          <div id="rb-on-join" class="rb-stack hidden">
+            <label>Your nickname<input id="rb-join-name" maxlength="12" autocomplete="off"></label>
+            <label>Room code<input id="rb-code" maxlength="5" autocapitalize="characters" autocomplete="off" spellcheck="false" placeholder="ABCDE"></label>
+            <button class="rb-btn-primary" id="rb-join">Join</button>
           </div>
-          <div id="bn-on-room" class="bn-room hidden">
-            <div class="bn-room-head">
-              <div class="bn-code-box"><small id="bn-code-label">Room code</small><b id="bn-code-show">·····</b></div>
-              <button class="bn-btn-secondary" id="bn-share" type="button">Invite</button>
+          <div id="rb-on-room" class="rb-room hidden">
+            <div class="rb-room-head">
+              <div class="rb-code-box"><small id="rb-code-label">Room code</small><b id="rb-code-show">·····</b></div>
+              <button class="rb-btn-secondary" id="rb-share" type="button">Invite</button>
             </div>
-            <ol class="bn-plist" id="bn-plist"></ol>
-            <div class="bn-teams hidden" id="bn-teams">
+            <ol class="rb-plist" id="rb-plist"></ol>
+            <div class="rb-teams hidden" id="rb-teams">
               <button type="button" data-team="A"></button>
               <button type="button" data-team="B"></button>
             </div>
-            <div class="bn-chat" id="bn-chat" aria-live="polite"></div>
-            <form class="bn-chat-form" id="bn-chat-form">
-              <input id="bn-chat-in" maxlength="200" autocomplete="off" enterkeyhint="send" placeholder="Say something…">
+            <div class="rb-chat" id="rb-chat" aria-live="polite"></div>
+            <form class="rb-chat-form" id="rb-chat-form">
+              <input id="rb-chat-in" maxlength="200" autocomplete="off" enterkeyhint="send" placeholder="Say something…">
               <button type="submit">Send</button>
             </form>
-            <div id="bn-host-ctl" class="bn-host-row">
-              <label>Bots<select id="bn-fill">${[0, 1, 2, 3].map(n => `<option ${n === 0 ? 'selected' : ''}>${n}</option>`).join('')}</select></label>
-              <button class="bn-btn-primary" id="bn-on-start" type="button">Start game</button>
+            <div id="rb-host-ctl" class="rb-host-row">
+              <label>Bots<select id="rb-fill">${[0, 1, 2, 3].map(n => `<option ${n === 0 ? 'selected' : ''}>${n}</option>`).join('')}</select></label>
+              <button class="rb-btn-primary" id="rb-on-start" type="button">Start game</button>
             </div>
-            <p class="bn-hint" id="bn-wait">Waiting for the host to start the game…</p>
+            <p class="rb-hint" id="rb-wait">Waiting for the host to start the game…</p>
           </div>
-          <p class="bn-status" id="bn-on-status"></p>
-          <div class="bn-row bn-room-foot">
-            <button class="bn-btn-ghost" id="bn-leave" type="button">Leave room</button>
-            <button class="bn-btn-ghost" id="bn-diag-open2" type="button">Connection details</button>
-          </div>
-        </div>
-      </div>
-      <div class="bn-overlay hidden" id="bn-diag-sheet">
-        <div class="bn-panel bn-panel-room">
-          <div class="bn-sub">Connection details</div>
-          <p class="bn-hint">If online play fails, tap Copy and send this to whoever is helping you.</p>
-          <pre class="bn-diag" id="bn-diag"></pre>
-          <div class="bn-row">
-            <button class="bn-btn-secondary" id="bn-diag-copy" type="button">Copy</button>
-            <button class="bn-btn-primary" id="bn-diag-close" type="button">Close</button>
+          <p class="rb-status" id="rb-on-status"></p>
+          <div class="rb-row rb-room-foot">
+            <button class="rb-btn-ghost" id="rb-leave" type="button">Leave room</button>
+            <button class="rb-btn-ghost" id="rb-diag-open2" type="button">Connection details</button>
           </div>
         </div>
       </div>
-      <div class="bn-overlay hidden" id="bn-end">
-        <div class="bn-panel">
-          <div class="bn-logo" id="bn-end-title">Game over</div>
-          <div class="bn-sub">Winlist</div>
-          <ol class="bn-winlist" id="bn-winlist"></ol>
-          <p class="bn-hint hidden" id="bn-end-wait">Waiting for the host to start the next game…</p>
-          <button class="bn-btn-primary" id="bn-again">Play again</button>
-          <button class="bn-btn-ghost" id="bn-lobby-btn">Change settings</button>
+      <div class="rb-overlay hidden" id="rb-diag-sheet">
+        <div class="rb-panel rb-panel-room">
+          <div class="rb-sub">Connection details</div>
+          <p class="rb-hint">If online play fails, tap Copy and send this to whoever is helping you.</p>
+          <pre class="rb-diag" id="rb-diag"></pre>
+          <div class="rb-row">
+            <button class="rb-btn-secondary" id="rb-diag-copy" type="button">Copy</button>
+            <button class="rb-btn-primary" id="rb-diag-close" type="button">Close</button>
+          </div>
+        </div>
+      </div>
+      <div class="rb-overlay hidden" id="rb-end">
+        <div class="rb-panel">
+          <div class="rb-title" id="rb-end-title">Game over</div>
+          <div class="rb-sub">Winlist</div>
+          <ol class="rb-winlist" id="rb-winlist"></ol>
+          <p class="rb-hint hidden" id="rb-end-wait">Waiting for the host to start the next game…</p>
+          <button class="rb-btn-primary" id="rb-again">Play again</button>
+          <button class="rb-btn-ghost" id="rb-lobby-btn">Change settings</button>
         </div>
       </div>`;
   }
 
   function create(config) {
     const demo = /[?&]demo\b/.test(location.search);   // autoplay preview used by the hub page
-    const room = new BN.Room();
+    const room = new RB.Room();
     const app = { room, me: null, config };
     const wrap = document.createElement('div');
     wrap.innerHTML = lobbyHTML(config.title || 'Study prototype', config.subtitle || '');
@@ -182,13 +193,13 @@
     const $ = id => document.getElementById(id);
 
     function readSettings() {
-      const name = BN.net ? BN.net.cleanName($('bn-name').value) : ($('bn-name').value.trim() || 'Player').slice(0, 12);
-      const bots = +$('bn-bots').value;
-      const skill = $('bn-skill').value;
-      const speed = $('bn-speed').value;
-      const startLevel = +$('bn-level').value;
-      const linesPerLevel = +$('bn-lpl').value;
-      const fullscreen = $('bn-fs') ? $('bn-fs').checked : DEFAULTS.fullscreen;
+      const name = RB.net ? RB.net.cleanName($('rb-name').value) : ($('rb-name').value.trim() || 'Player').slice(0, 12);
+      const bots = +$('rb-bots').value;
+      const skill = $('rb-skill').value;
+      const speed = $('rb-speed').value;
+      const startLevel = +$('rb-level').value;
+      const linesPerLevel = +$('rb-lpl').value;
+      const fullscreen = $('rb-fs') ? $('rb-fs').checked : DEFAULTS.fullscreen;
       store.set('settings', { name, bots, skill, speed, startLevel, linesPerLevel, fullscreen });
       app.fullscreen = fullscreen;
       return { name, bots, skill, game: { speed, startLevel, linesPerLevel } };
@@ -196,7 +207,7 @@
 
     function setup() {
       const { name, bots, skill, game } = readSettings();
-      room.settings = demo ? Object.assign({}, BN.DEFAULT_SETTINGS) : game;
+      room.settings = demo ? Object.assign({}, RB.DEFAULT_SETTINGS) : game;
       room.net = null;
       room.authority = true;
       room.players = []; room.bots = [];
@@ -211,52 +222,52 @@
 
     function start() {
       if (app.fullscreen && !demo) enterFullscreen(config.orientation);
-      $('bn-lobby').classList.add('hidden');
-      $('bn-end').classList.add('hidden');
+      $('rb-lobby').classList.add('hidden');
+      $('rb-end').classList.add('hidden');
       room.start();
     }
 
-    $('bn-start').addEventListener('click', () => { setup(); start(); });
-    if (BN.sound) {
+    $('rb-start').addEventListener('click', () => { setup(); start(); });
+    if (RB.sound) {
       // Plays a short beep (even if game sound is muted) and shows the audio status,
       // so a player can tell whether the phone is blocking sound.
-      $('bn-test-sound').addEventListener('click', () => {
-        BN.sound.unlock();
-        $('bn-sound-status').textContent = 'starting…';
-        setTimeout(() => { BN.sound.play('test', null, true); $('bn-sound-status').textContent = BN.sound.status(); }, 250);
+      $('rb-test-sound').addEventListener('click', () => {
+        RB.sound.unlock();
+        $('rb-sound-status').textContent = 'starting…';
+        setTimeout(() => { RB.sound.play('test', null, true); $('rb-sound-status').textContent = RB.sound.status(); }, 250);
       });
-    } else $('bn-test-sound').parentElement.remove();
-    $('bn-again').addEventListener('click', () => { if (session && session.isHost) hostStart(); else if (!session) start(); });
-    $('bn-lobby-btn').addEventListener('click', () => {
-      $('bn-end').classList.add('hidden');
-      $((session ? 'bn-online' : 'bn-lobby')).classList.remove('hidden');
+    } else $('rb-test-sound').parentElement.remove();
+    $('rb-again').addEventListener('click', () => { if (session && session.isHost) hostStart(); else if (!session) start(); });
+    $('rb-lobby-btn').addEventListener('click', () => {
+      $('rb-end').classList.add('hidden');
+      $((session ? 'rb-online' : 'rb-lobby')).classList.remove('hidden');
     });
 
     // ---------------------------------------------------------- online play
     let session = null;
     app.session = () => session;   // for debugging and tests
     const show = (id, on) => $(id).classList.toggle('hidden', !on);
-    const status = (text, isError) => { $('bn-on-status').textContent = text || ''; $('bn-on-status').classList.toggle('error', !!isError); };
+    const status = (text, isError) => { $('rb-on-status').textContent = text || ''; $('rb-on-status').classList.toggle('error', !!isError); };
 
     function sanitizeSettings(g) {
       g = g || {};
       return {
-        speed: BN.SPEEDS[g.speed] ? g.speed : 'classic',
+        speed: RB.SPEEDS[g.speed] ? g.speed : 'classic',
         startLevel: Math.max(1, Math.min(99, g.startLevel | 0 || 1)),
         linesPerLevel: Math.max(1, Math.min(20, g.linesPerLevel | 0 || 2)),
-        mode: BN.MODES[g.mode] ? g.mode : 'normal',
+        mode: RB.MODES[g.mode] ? g.mode : 'normal',
       };
     }
 
     function openOnline(mode) {
-      show('bn-lobby', false); show('bn-end', false); show('bn-online', true);
-      show('bn-on-join', mode === 'join');
-      show('bn-on-room', mode !== 'join');
-      $('bn-on-panel').classList.toggle('bn-panel-room', mode !== 'join');
-      show('bn-host-ctl', mode === 'host');
-      show('bn-wait', mode === 'guest');
-      $('bn-on-title').textContent = mode === 'join' ? 'Join a room' : 'Partyline';
-      if (mode !== 'join') setTimeout(() => { const c = $('bn-chat'); c.scrollTop = c.scrollHeight; }, 0);
+      show('rb-lobby', false); show('rb-end', false); show('rb-online', true);
+      show('rb-on-join', mode === 'join');
+      show('rb-on-room', mode !== 'join');
+      $('rb-on-panel').classList.toggle('rb-panel-room', mode !== 'join');
+      show('rb-host-ctl', mode === 'host');
+      show('rb-wait', mode === 'guest');
+      $('rb-on-title').textContent = mode === 'join' ? 'Join a room' : 'Partyline';
+      if (mode !== 'join') setTimeout(() => { const c = $('rb-chat'); c.scrollTop = c.scrollHeight; }, 0);
     }
 
     function leaveOnline(message) {
@@ -264,7 +275,7 @@
       room.net = null;
       room.authority = true;
       room.running = false;
-      show('bn-online', false); show('bn-end', false); show('bn-lobby', true);
+      show('rb-online', false); show('rb-end', false); show('rb-lobby', true);
       if (message) room.log(message, 'system');
       setup();
       setTimeout(maybeUpdate, 0);
@@ -272,7 +283,7 @@
 
     // Room chat (the partyline before and between games).
     function roomChat(text, kind = 'chat') {
-      const c = $('bn-chat');
+      const c = $('rb-chat');
       const atBottom = c.scrollHeight - c.scrollTop - c.clientHeight < 40;
       const div = document.createElement('div');
       div.className = 'log-line log-' + kind;
@@ -288,26 +299,26 @@
       const name = sl => { const p = st.players.find(x => x.slot === sl); return p ? esc(p.name) : '?'; };
       const time = ms => { const sec = Math.round(ms / 1000); return `${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, '0')}`; };
       const place = p => p.win ? '&#127942;' : p.place;
-      const rows = st.players.map(p => `<tr class="${p.slot === mine ? 'you' : ''}"><td>${place(p)}</td><td class="nm">${p.team ? `<span class="bn-tm bn-tm-${p.team}">${p.team}</span> ` : ''}${esc(p.name)}${p.bot ? ' <i>bot</i>' : ''}</td>` +
-        `<td>${time(p.ms)}</td><td>${p.ppm}</td><td>${p.lines}</td><td>${p.tetrises}</td><td>${p.sent}</td><td>${p.used}/${p.recv}</td></tr>`).join('');
+      const rows = st.players.map(p => `<tr class="${p.slot === mine ? 'you' : ''}"><td>${place(p)}</td><td class="nm">${p.team ? `<span class="rb-tm rb-tm-${p.team}">${p.team}</span> ` : ''}${esc(p.name)}${p.bot ? ' <i>bot</i>' : ''}</td>` +
+        `<td>${time(p.ms)}</td><td>${p.ppm}</td><td>${p.lines}</td><td>${p.busts}</td><td>${p.sent}</td><td>${p.used}/${p.recv}</td></tr>`).join('');
       const aw = [], A = st.awards, P = sl => st.players.find(x => x.slot === sl);
       if (A.attacker) aw.push(`&#128163; Top attacker: <b>${name(A.attacker)}</b>`);
       if (A.fastest) aw.push(`&#9889; Fastest: <b>${name(A.fastest)}</b> (${P(A.fastest).ppm} pieces/min)`);
-      if (A.tetris) aw.push(`&#129521; Most tetrises: <b>${name(A.tetris)}</b> (${P(A.tetris).tetrises})`);
+      if (A.busts) aw.push(`&#128165; Most rowbusts: <b>${name(A.busts)}</b> (${P(A.busts).busts})`);
       const me = mine && P(mine);
       if (me) {
         const top = Object.entries(me.by).sort((a, b) => b[1] - a[1])[0];
         if (top && top[1] > 0) aw.push(`&#127919; Hit you most: <b>${name(top[0] | 0)}</b> &times;${top[1]}`);
       }
-      return `<div class="bn-st-head">&#128202; Round stats <span>${time(st.ms)}</span></div>` +
+      return `<div class="rb-st-head">&#128202; Round stats <span>${time(st.ms)}</span></div>` +
         `<table><thead><tr><th></th><th class="nm">Player</th><th>Time</th><th>PPM</th><th>Lines</th><th>4&times;</th><th>Sent</th><th>Spec</th></tr></thead><tbody>${rows}</tbody></table>` +
         (aw.length ? `<ul>${aw.map(x => `<li>${x}</li>`).join('')}</ul>` : '') +
-        `<p>PPM pieces per minute &middot; 4&times; tetrises &middot; Sent lines sent &middot; Spec specials used/received</p>`;
+        `<p>PPM pieces per minute &middot; 4&times; rowbusts (4 lines at once) &middot; Sent lines sent &middot; Spec specials used/received</p>`;
     }
     function roomStats(st) {
-      const c = $('bn-chat');
+      const c = $('rb-chat');
       const div = document.createElement('div');
-      div.className = 'bn-stats';
+      div.className = 'rb-stats';
       div.innerHTML = statsCard(st);
       c.appendChild(div);
       while (c.children.length > 200) c.firstChild.remove();
@@ -315,23 +326,23 @@
     }
 
     function newSession(kind = 'p2p') {
-      $('bn-chat').innerHTML = '';
+      $('rb-chat').innerHTML = '';
       if (session) session.close();
-      const s = session = kind === 'server' ? new BN.net.ServerSession() : new BN.net.Session();
-      $('bn-code-label').textContent = s.public ? 'Public room' : 'Room code';
-      $('bn-code-show').classList.toggle('bn-room-name', !!s.public);
+      const s = session = kind === 'server' ? new RB.net.ServerSession() : new RB.net.Session();
+      $('rb-code-label').textContent = s.public ? 'Public room' : 'Room code';
+      $('rb-code-show').classList.toggle('rb-room-name', !!s.public);
       s.on('status', t => status(t));
       s.on('error', t => {
-        if (s.public) { if (session === s) { session = null; show('bn-online', false); openMP(t); } return; }
+        if (s.public) { if (session === s) { session = null; show('rb-online', false); openMP(t); } return; }
         status(t, true); if (!s.isHost && !s.conn) { s.close(); session = null; }
       });
       s.on('closed', t => {
         if (session !== s) return;
         leaveOnline();
-        if (s.public) openMP(t); else $('bn-lobby-msg').textContent = t;
+        if (s.public) openMP(t); else $('rb-lobby-msg').textContent = t;
       });
       s.on('ready', code => {
-        $('bn-code-show').textContent = code;
+        $('rb-code-show').textContent = code;
         roomChat(s.public
           ? (s.spectator
             ? `You are watching ${code} (all 4 seats are taken). You will get a seat when one is free after a game.`
@@ -340,29 +351,29 @@
       });
       s.on('role', isHost => {
         if (session !== s || room.running) return;
-        if (!$('bn-online').classList.contains('hidden') || !$('bn-end').classList.contains('hidden')) openOnline(isHost ? 'host' : 'guest');
+        if (!$('rb-online').classList.contains('hidden') || !$('rb-end').classList.contains('hidden')) openOnline(isHost ? 'host' : 'guest');
       });
       s.on('lobby', l => {
-        if (!s.isHost && $('bn-on-join') && !$('bn-on-join').classList.contains('hidden')) openOnline('guest');
-        $('bn-code-show').textContent = l.code || s.code;
-        if (s.public) { const md = BN.MODES[l.mode]; $('bn-code-label').textContent = md && md.desc ? `${md.label} · ${md.desc}` : 'Public room'; }
-        const teamTag = t => (t ? `<span class="bn-tm bn-tm-${t}">${t}</span> ` : '');
-        $('bn-plist').innerHTML = l.players.map(p => `<li>${teamTag(p.team)}${p.name}${p.host ? ' <em>host</em>' : ''}</li>`).join('')
+        if (!s.isHost && $('rb-on-join') && !$('rb-on-join').classList.contains('hidden')) openOnline('guest');
+        $('rb-code-show').textContent = l.code || s.code;
+        if (s.public) { const md = RB.MODES[l.mode]; $('rb-code-label').textContent = md && md.desc ? `${md.label} · ${md.desc}` : 'Public room'; }
+        const teamTag = t => (t ? `<span class="rb-tm rb-tm-${t}">${t}</span> ` : '');
+        $('rb-plist').innerHTML = l.players.map(p => `<li>${teamTag(p.team)}${p.name}${p.host ? ' <em>host</em>' : ''}</li>`).join('')
           + (l.watchers || []).map(n => `<li class="watcher">&#128065; ${n}</li>`).join('');
         // Teams room: pick team A or B (between games; 2 players per team).
         const teams = l.mode === 'teams', mine = l.players.find(p => p.me);
-        show('bn-teams', teams && !!mine);
+        show('rb-teams', teams && !!mine);
         if (teams && mine) {
-          $('bn-teams').querySelectorAll('button').forEach(b => {
+          $('rb-teams').querySelectorAll('button').forEach(b => {
             const t = b.dataset.team, n = l.players.filter(p => p.team === t).length;
             b.classList.toggle('on', mine.team === t);
-            b.classList.toggle('bn-tm-' + t, true);
+            b.classList.toggle('rb-tm-' + t, true);
             b.disabled = mine.team !== t && n >= 2;
             b.innerHTML = `Team ${t} <small>${mine.team === t ? 'your team' : n >= 2 ? 'full' : 'tap to join'} · ${n}/2</small>`;
           });
         }
         const free = MAX_PLAYERS - l.players.length;
-        const fill = $('bn-fill');
+        const fill = $('rb-fill');
         [...fill.options].forEach(o => { o.disabled = +o.value > free; });
         if (+fill.value > free) fill.value = String(free);
       });
@@ -380,7 +391,7 @@
         room.net = s;
         room.authority = s.serverAuthority ? false : s.isHost;
         config.onSetup && config.onSetup(app);
-        show('bn-online', false);
+        show('rb-online', false);
         start();
         if (app.me && app.me.team) {
           const mates = room.players.filter(p => p !== app.me && p.team === app.me.team).map(p => p.name);
@@ -396,7 +407,7 @@
         if (s.public && room.running && !app.watching) { room.log('*** Connection lost – reconnecting… keep playing ***', 'death'); return; }
         if (room.running) { room.running = false; if (!app.watching) room.log('*** Connection lost – you are out of this game ***', 'death'); }
         setWatching(false);
-        show('bn-end', false);
+        show('rb-end', false);
         openOnline('guest');
         roomChat(`Connection to the ${s.public ? 'server' : 'host'} was lost – reconnecting…`, 'death');
       });
@@ -408,7 +419,7 @@
           // going, the server's snapshot that follows switches to watching it.
           room.running = false;
           room.log('*** You were out of this game while disconnected ***', 'death');
-          show('bn-end', false);
+          show('rb-end', false);
           openOnline(s.isHost ? 'host' : 'guest');
           roomChat('Reconnected, but this game went on without you. You play in the next one.', 'system');
           return;
@@ -428,38 +439,38 @@
     let mpTimer = null, mpData = null, mpPeriod = 'top';
     const esc = t => String(t).replace(/[&<>"]/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[ch]));
     function openMP(message) {
-      show('bn-lobby', false); show('bn-online', false); show('bn-end', false); show('bn-mp', true);
-      $('bn-mp-msg').textContent = message || '';
+      show('rb-lobby', false); show('rb-online', false); show('rb-end', false); show('rb-mp', true);
+      $('rb-mp-msg').textContent = message || '';
       refreshMP();
       clearInterval(mpTimer);
-      mpTimer = setInterval(() => { if ($('bn-mp').classList.contains('hidden')) clearInterval(mpTimer); else refreshMP(); }, 3000);
+      mpTimer = setInterval(() => { if ($('rb-mp').classList.contains('hidden')) clearInterval(mpTimer); else refreshMP(); }, 3000);
     }
     async function refreshMP() {
-      try { mpData = await BN.net.fetchLobby(); renderMP(); }
-      catch (e) { $('bn-mp-me').textContent = `Can't load the rooms: ${e.message}. Retrying…`; }
+      try { mpData = await RB.net.fetchLobby(); renderMP(); }
+      catch (e) { $('rb-mp-me').textContent = `Can't load the rooms: ${e.message}. Retrying…`; }
     }
     function renderMP() {
       const d = mpData, name = readSettings().name;
       const me = d.me;
-      $('bn-mp-me').innerHTML = `Playing as <b>${esc(name)}</b>` + (me ? ` · rank #${me.rank} · ${me.wins} win${me.wins === 1 ? '' : 's'}` : ' · not ranked yet') +
-        (me && me.stats && me.stats.pieces ? `<small>${me.games} game${me.games === 1 ? '' : 's'} · ${me.stats.lines} lines · ${me.stats.tetrises} tetrises · ` +
+      $('rb-mp-me').innerHTML = `Playing as <b>${esc(name)}</b>` + (me ? ` · rank #${me.rank} · ${me.wins} win${me.wins === 1 ? '' : 's'}` : ' · not ranked yet') +
+        (me && me.stats && me.stats.pieces ? `<small>${me.games} game${me.games === 1 ? '' : 's'} · ${me.stats.lines} lines · ${me.stats.busts} rowbusts · ` +
           `${me.stats.ppm} pieces/min${me.stats.bestPpm ? ` (best ${me.stats.bestPpm})` : ''} · ${me.stats.sent} lines sent · ${me.stats.specials} specials used</small>` : '');
       const max = d.maxPlayers || MAX_PLAYERS;
-      $('bn-rooms').innerHTML = d.rooms.map(r => {
+      $('rb-rooms').innerHTML = d.rooms.map(r => {
         const st = { empty: ['Empty', 'st-empty'], waiting: ['Waiting', 'st-wait'], playing: ['Playing', 'st-play'] }[r.state] || ['?', 'st-empty'];
         const seats = Array.from({ length: max }, (_, k) => r.players[k]
-          ? `<div class="bn-seat p p${k + 1}">${esc(r.players[k])}</div>` : '<div class="bn-seat">open</div>').join('');
+          ? `<div class="rb-seat p p${k + 1}">${esc(r.players[k])}</div>` : '<div class="rb-seat">open</div>').join('');
         const n = r.players.length;
-        const btn = n >= max ? `<button class="bn-join watch" data-room="${r.n}" data-watch="1" type="button">&#128065; Watch</button>`
-          : r.state === 'playing' ? `<button class="bn-join" data-room="${r.n}" type="button">Join · watch now · ${n}/${max}</button>`
-          : `<button class="bn-join" data-room="${r.n}" type="button">${n ? 'Join' : 'Open room'} · ${n}/${max}</button>`;
+        const btn = n >= max ? `<button class="rb-join watch" data-room="${r.n}" data-watch="1" type="button">&#128065; Watch</button>`
+          : r.state === 'playing' ? `<button class="rb-join" data-room="${r.n}" type="button">Join · watch now · ${n}/${max}</button>`
+          : `<button class="rb-join" data-room="${r.n}" type="button">${n ? 'Join' : 'Open room'} · ${n}/${max}</button>`;
         const eye = r.watchers ? `<span class="eye">&#128065; ${r.watchers}</span>` : '';
-        const md = BN.MODES[r.mode];
-        const mode = md && md.desc ? `<div class="bn-rmode"><b>${md.label}</b> ${md.short}</div>` : '';
-        return `<div class="bn-rcard"><div class="head"><span class="name">Room ${r.n}</span>${eye}<span class="state ${st[1]}">${st[0]}</span></div>${mode}<div class="bn-seats">${seats}</div>${btn}</div>`;
+        const md = RB.MODES[r.mode];
+        const mode = md && md.desc ? `<div class="rb-rmode"><b>${md.label}</b> ${md.short}</div>` : '';
+        return `<div class="rb-rcard"><div class="head"><span class="name">Room ${r.n}</span>${eye}<span class="state ${st[1]}">${st[0]}</span></div>${mode}<div class="rb-seats">${seats}</div>${btn}</div>`;
       }).join('');
       const list = d[mpPeriod] || [];
-      $('bn-rank-list').innerHTML = list.length ? list.map((p, i) =>
+      $('rb-rank-list').innerHTML = list.length ? list.map((p, i) =>
         `<li class="${p.you ? 'you' : ''}"><span class="n">${i + 1}</span><span class="who">${esc(p.name)}</span><span class="w">${p.wins}<small>${p.games} game${p.games === 1 ? '' : 's'}</small></span></li>`).join('')
         : '<li class="empty">No ranked games yet. Win a game with 2+ players to get here.</li>';
     }
@@ -467,9 +478,9 @@
       const { name } = readSettings();
       if (app.fullscreen) enterFullscreen(config.orientation);
       clearInterval(mpTimer);
-      show('bn-mp', false);
-      $('bn-plist').innerHTML = '';
-      $('bn-code-show').textContent = `Room ${n}`;
+      show('rb-mp', false);
+      $('rb-plist').innerHTML = '';
+      $('rb-code-show').textContent = `Room ${n}`;
       openOnline('guest');
       newSession('server').joinRoom(n, name, watch);
     }
@@ -490,7 +501,7 @@
       room.authority = false;
       setWatching(true);
       app.me = room.players[0];
-      show('bn-online', false);
+      show('rb-online', false);
       start();
       if (snapshot) {
         for (const f of msg.fields) room.receive(f);
@@ -506,76 +517,76 @@
     function hostStart() {
       if (!session || !session.isHost) return;   // only the host can start a game
       const { skill, game } = readSettings();
-      session.startGame(game, +$('bn-fill').value, SKILLS[skill]);
+      session.startGame(game, +$('rb-fill').value, SKILLS[skill]);
     }
 
-    if (BN.net && !demo) {
-      const clearMsg = () => { $('bn-lobby-msg').textContent = ''; };
-      ['bn-host', 'bn-join-open', 'bn-start'].forEach(id => $(id).addEventListener('click', clearMsg));
-      $('bn-host').addEventListener('click', () => {
+    if (RB.net && !demo) {
+      const clearMsg = () => { $('rb-lobby-msg').textContent = ''; };
+      ['rb-host', 'rb-join-open', 'rb-start'].forEach(id => $(id).addEventListener('click', clearMsg));
+      $('rb-host').addEventListener('click', () => {
         const { name } = readSettings();
         if (app.fullscreen) enterFullscreen(config.orientation);
-        $('bn-plist').innerHTML = '';
-        $('bn-code-show').textContent = '·····';
+        $('rb-plist').innerHTML = '';
+        $('rb-code-show').textContent = '·····';
         openOnline('host');
         newSession().host(name);
       });
-      const openJoin = () => { status(''); $('bn-join-name').value = $('bn-name').value; openOnline('join'); };
-      $('bn-join-open').addEventListener('click', () => { openJoin(); $('bn-code').focus(); });
-      $('bn-join').addEventListener('click', () => {
-        $('bn-name').value = $('bn-join-name').value;
+      const openJoin = () => { status(''); $('rb-join-name').value = $('rb-name').value; openOnline('join'); };
+      $('rb-join-open').addEventListener('click', () => { openJoin(); $('rb-code').focus(); });
+      $('rb-join').addEventListener('click', () => {
+        $('rb-name').value = $('rb-join-name').value;
         const { name } = readSettings();
         if (app.fullscreen) enterFullscreen(config.orientation);
-        $('bn-plist').innerHTML = '';
-        newSession().join($('bn-code').value, name);
+        $('rb-plist').innerHTML = '';
+        newSession().join($('rb-code').value, name);
       });
-      $('bn-code').addEventListener('input', e => { e.target.value = BN.net.cleanCode(e.target.value); });
-      $('bn-code').addEventListener('keydown', e => { if (e.key === 'Enter') $('bn-join').click(); });
-      $('bn-on-start').addEventListener('click', hostStart);
-      $('bn-teams').addEventListener('click', e => {
+      $('rb-code').addEventListener('input', e => { e.target.value = RB.net.cleanCode(e.target.value); });
+      $('rb-code').addEventListener('keydown', e => { if (e.key === 'Enter') $('rb-join').click(); });
+      $('rb-on-start').addEventListener('click', hostStart);
+      $('rb-teams').addEventListener('click', e => {
         const b = e.target.closest('button[data-team]');
         if (b && !b.disabled && !b.classList.contains('on') && session && session.setTeam) session.setTeam(b.dataset.team);
       });
-      $('bn-chat-form').addEventListener('submit', e => {
+      $('rb-chat-form').addEventListener('submit', e => {
         e.preventDefault();
-        if (session) session.chat($('bn-chat-in').value);
-        $('bn-chat-in').value = '';
+        if (session) session.chat($('rb-chat-in').value);
+        $('rb-chat-in').value = '';
       });
-      $('bn-leave').addEventListener('click', () => { const pub = session && session.public; leaveOnline(); if (pub) openMP(); });
-      if ($('bn-mp-open')) {
-        $('bn-mp-open').addEventListener('click', () => { $('bn-lobby-msg').textContent = ''; readSettings(); openMP(); });
-        $('bn-mp-back').addEventListener('click', () => { clearInterval(mpTimer); show('bn-mp', false); show('bn-lobby', true); });
-        $('bn-rooms').addEventListener('click', e => { const b = e.target.closest('.bn-join[data-room]'); if (b) joinPublic(+b.dataset.room, !!b.dataset.watch); });
-        document.querySelectorAll('.bn-period button').forEach(b => b.addEventListener('click', () => {
+      $('rb-leave').addEventListener('click', () => { const pub = session && session.public; leaveOnline(); if (pub) openMP(); });
+      if ($('rb-mp-open')) {
+        $('rb-mp-open').addEventListener('click', () => { $('rb-lobby-msg').textContent = ''; readSettings(); openMP(); });
+        $('rb-mp-back').addEventListener('click', () => { clearInterval(mpTimer); show('rb-mp', false); show('rb-lobby', true); });
+        $('rb-rooms').addEventListener('click', e => { const b = e.target.closest('.rb-join[data-room]'); if (b) joinPublic(+b.dataset.room, !!b.dataset.watch); });
+        document.querySelectorAll('.rb-period button').forEach(b => b.addEventListener('click', () => {
           mpPeriod = b.dataset.period;
-          document.querySelectorAll('.bn-period button').forEach(x => x.classList.toggle('on', x === b));
+          document.querySelectorAll('.rb-period button').forEach(x => x.classList.toggle('on', x === b));
           if (mpData) renderMP();
         }));
         if (new URLSearchParams(location.search).get('room')) openMP();
       }
       const openDiag = () => {
-        $('bn-diag').textContent = BN.net.diag() + `\n\nscreen ${innerWidth}x${innerHeight} · online=${navigator.onLine} · ${new Date().toISOString()}`;
-        show('bn-diag-sheet', true);
-        const pre = $('bn-diag'); pre.scrollTop = pre.scrollHeight;
+        $('rb-diag').textContent = RB.net.diag() + `\n\nscreen ${innerWidth}x${innerHeight} · online=${navigator.onLine} · ${new Date().toISOString()}`;
+        show('rb-diag-sheet', true);
+        const pre = $('rb-diag'); pre.scrollTop = pre.scrollHeight;
       };
-      $('bn-diag-open').addEventListener('click', openDiag);
-      $('bn-diag-open2').addEventListener('click', openDiag);
-      $('bn-diag-close').addEventListener('click', () => show('bn-diag-sheet', false));
-      $('bn-diag-copy').addEventListener('click', async () => {
-        const text = $('bn-diag').textContent;
-        try { await navigator.clipboard.writeText(text); $('bn-diag-copy').textContent = 'Copied ✓'; }
+      $('rb-diag-open').addEventListener('click', openDiag);
+      $('rb-diag-open2').addEventListener('click', openDiag);
+      $('rb-diag-close').addEventListener('click', () => show('rb-diag-sheet', false));
+      $('rb-diag-copy').addEventListener('click', async () => {
+        const text = $('rb-diag').textContent;
+        try { await navigator.clipboard.writeText(text); $('rb-diag-copy').textContent = 'Copied ✓'; }
         catch (e) {
-          const r = document.createRange(); r.selectNodeContents($('bn-diag'));
+          const r = document.createRange(); r.selectNodeContents($('rb-diag'));
           const sel = getSelection(); sel.removeAllRanges(); sel.addRange(r);
-          $('bn-diag-copy').textContent = 'Selected – use Copy';
+          $('rb-diag-copy').textContent = 'Selected – use Copy';
         }
-        setTimeout(() => { $('bn-diag-copy').textContent = 'Copy'; }, 2500);
+        setTimeout(() => { $('rb-diag-copy').textContent = 'Copy'; }, 2500);
       });
-      $('bn-share').addEventListener('click', async () => {
+      $('rb-share').addEventListener('click', async () => {
         if (!session) return;
         const url = session.inviteLink();
         try {
-          if (navigator.share) { await navigator.share({ title: 'BlocksNet', text: `Join my BlocksNet room ${session.code}`, url }); return; }
+          if (navigator.share) { await navigator.share({ title: 'Rowbusters', text: `Join my Rowbusters room ${session.code}`, url }); return; }
         } catch (e) { if (e && e.name === 'AbortError') return; }
         try { await navigator.clipboard.writeText(url); status('Invite link copied.'); }
         catch (e) { status(url); }
@@ -583,7 +594,7 @@
       addEventListener('pagehide', () => { if (session) session.close(); });
       // Invite links look like ...?join=ABCDE
       const invite = new URLSearchParams(location.search).get('join');
-      if (invite) { $('bn-code').value = BN.net.cleanCode(invite); openJoin(); }
+      if (invite) { $('rb-code').value = RB.net.cleanCode(invite); openJoin(); }
     }
 
     room.on('end', winner => {
@@ -601,22 +612,22 @@
         return;
       }
       const guest = !!(session && !session.isHost);
-      show('bn-again', !guest);
-      show('bn-end-wait', guest);
-      $('bn-lobby-btn').textContent = session ? 'Back to room' : 'Change settings';
+      show('rb-again', !guest);
+      show('rb-end-wait', guest);
+      $('rb-lobby-btn').textContent = session ? 'Back to room' : 'Change settings';
       setTimeout(() => {
-        if (!room.running) show('bn-online', false);
-        $('bn-end-title').innerHTML = winner ? (youWon ? 'You <span>win!</span>' : `${winner.name} <span>wins</span>`) : 'Game <span>over</span>';
-        $('bn-winlist').innerHTML = Object.entries(wins).sort((a, b) => b[1] - a[1]).slice(0, 8)
+        if (!room.running) show('rb-online', false);
+        $('rb-end-title').innerHTML = winner ? (youWon ? 'You <span>win!</span>' : `${winner.name} <span>wins</span>`) : 'Game <span>over</span>';
+        $('rb-winlist').innerHTML = Object.entries(wins).sort((a, b) => b[1] - a[1]).slice(0, 8)
           .map(([n, w]) => `<li><span>${n}</span><b>${w}</b></li>`).join('');
-        if (!room.running) $('bn-end').classList.remove('hidden');
+        if (!room.running) $('rb-end').classList.remove('hidden');
       }, 900);
       const b = room.players.find(p => p.isBot);
       if (b) setTimeout(() => room.log(`<${b.name}> ${BOT_CHAT[Math.floor(Math.random() * BOT_CHAT.length)]}`, 'chat'), 500);
     });
 
     room.on('special', e => {
-      if (e.target === app.me && e.from !== app.me) haptic(BN.SPECIAL_INFO[e.special].hostile ? 40 : 15);
+      if (e.target === app.me && e.from !== app.me) haptic(RB.SPECIAL_INFO[e.special].hostile ? 40 : 15);
     });
     room.on('lines', e => { if (e.targets.includes(app.me)) haptic(25); });
     room.on('death', p => {
@@ -628,7 +639,7 @@
     });
 
     // ---------------------------------------------------------- sound effects
-    const sfx = (name, arg) => { if (!demo && !app.watching && BN.sound) BN.sound.play(name, arg); return true; };
+    const sfx = (name, arg) => { if (!demo && !app.watching && RB.sound) RB.sound.play(name, arg); return true; };
     room.on('start', () => sfx('start'));
     room.on('lock', e => { if (e.player === app.me) sfx(e.hard ? 'drop' : 'lock'); });
     room.on('clear', e => {
@@ -638,7 +649,7 @@
     });
     room.on('special', e => {
       if (e.from === app.me) sfx('zap');
-      else if (e.target === app.me) sfx(BN.SPECIAL_INFO[e.special].hostile ? 'hit' : 'help');
+      else if (e.target === app.me) sfx(RB.SPECIAL_INFO[e.special].hostile ? 'hit' : 'help');
     });
     room.on('lines', e => { if (e.from !== app.me && e.targets.includes(app.me)) sfx('hit'); });
     room.on('death', p => { if (p === app.me) sfx('dead'); });
@@ -663,7 +674,7 @@
       act[k] = (...a) => (app.watching ? undefined : f(...a));
     }
     app.act = act;
-    BN.current = app;   // handy from the dev console
+    RB.current = app;   // handy from the dev console
     app.bindHold = bindHold;
 
     // Keyboard (handy for desktop testing and Bluetooth keyboards on phones).
@@ -706,7 +717,7 @@
     let pendingUpdate = null;
     function applyUpdate(v) {
       let n = 0;
-      try { n = +(sessionStorage.getItem('bn.upd.' + v) || 0); sessionStorage.setItem('bn.upd.' + v, n + 1); } catch (e) { /* ignore */ }
+      try { n = +(sessionStorage.getItem('rb.upd.' + v) || 0); sessionStorage.setItem('rb.upd.' + v, n + 1); } catch (e) { /* ignore */ }
       if (n >= 2) return;            // don't loop if a stale copy keeps coming back
       const u = new URL(location.href);
       u.searchParams.set('v', v);
@@ -723,7 +734,7 @@
         const r = await fetch('version.json?t=' + Date.now(), { cache: 'no-store' });
         if (!r.ok) return;
         const v = String((await r.json()).version || '');
-        if (v && v !== BN.VERSION) { pendingUpdate = v; maybeUpdate(); }
+        if (v && v !== RB.VERSION) { pendingUpdate = v; maybeUpdate(); }
       } catch (e) { /* offline: keep playing this copy */ }
     }
     checkUpdate();
@@ -733,6 +744,6 @@
     return app;
   }
 
-  BN.app = create;
-  BN.store = store;
-})(window.BN);
+  RB.app = create;
+  RB.store = store;
+})(window.RB);

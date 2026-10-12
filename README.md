@@ -1,12 +1,12 @@
-# BlocksNet
+# Rowbusters
 
-Dropping blocks multiplayer online action — a study project.
+**Clear lines. Send trouble.** Multiplayer block-dropping action — a study project.
 
 It is an online block-stacking game for up to 4 players with special attack blocks, built to run in the browser of iPhones and Linux phones (PinePhone / Librem 5 with Phosh or Plasma Mobile, Firefox or GNOME Web).
 
-## Run it
+<img src="docs/play.png" alt="Rowbusters on a phone" width="300">
 
-No build step and no dependencies. Serve the repo root a## Play it
+## Play it
 
 **https://fmlacerda.github.io/BlocksNet/**
 
@@ -18,6 +18,12 @@ python3 -m http.server 8000
 ```
 
 On iOS use *Share → Add to Home Screen*, and on Linux phones use *Install / Add to home*, so it runs full-screen like an app.
+
+## Brand
+
+Rowbusters (formerly BlocksNet). The logo is a row of blocks bursting apart, with **ROW** in lime and **BUSTERS** in white, in Bungee; all other text uses Space Grotesk (both from Google Fonts). Palette: deep violet `#160B2E` background, `#1F1240` / `#251550` panels, `#34205E` lines, `#F5F0FF` text, `#A99BCB` secondary text, lime `#C6FF3D` (main buttons, highlights) and hot pink `#FF2E88` (hard drop, Multiplayer, spectating). The colours live as CSS variables at the top of `css/common.css`. Block and special colours are part of the game, not the brand, and are unchanged. A 4-line clear is called a **rowbust**.
+
+The online server keeps its original Cloudflare name `blocksnet` (`blocksnet.fmlacerda.workers.dev`): renaming the Worker would start a new server with an empty ranking. Phones that played as BlocksNet keep their nickname, settings and ranking identity (saved data is copied from the old keys on first launch).
 
 ## Layout and controls
 
@@ -46,11 +52,11 @@ Short retro sound effects are generated in the browser (Web Audio), so there are
 ## Fullscreen
 
 - **Android and Linux phone browsers** (Firefox, Chromium, GNOME Web): leave *Play fullscreen* ticked in the lobby. The game goes fullscreen and locks to portrait when you tap Start.
-- **iPhone**: Safari has no fullscreen mode for web pages. Use *Share → Add to Home Screen* and launch BlocksNet from the icon. It then opens without browser bars (the lobby shows this tip on iPhone).
+- **iPhone**: Safari has no fullscreen mode for web pages. Use *Share → Add to Home Screen* and launch Rowbusters from the icon. It then opens without browser bars (the lobby shows this tip on iPhone).
 
 ## Updates
 
-The game checks `version.json` when it opens and whenever it comes back to the front. If the phone is showing an older saved copy, it reloads itself with the new version (only in the lobby, never mid-game or in an online room). When publishing a change, bump the version in both `version.json` and `js/engine.js` (`BN.VERSION`), and the `?v=` tags in `index.html`.
+The game checks `version.json` when it opens and whenever it comes back to the front. If the phone is showing an older saved copy, it reloads itself with the new version (only in the lobby, never mid-game or in an online room). When publishing a change, bump the version in both `version.json` and `js/engine.js` (`RB.VERSION`), and the `?v=` tags in `index.html`.
 
 The `stable` branch holds the last known-good version for quick rollback.
 
@@ -80,7 +86,7 @@ The **Multiplayer** button opens seven public rooms (Room 1–7, up to 4 players
 
 **Watching:** anyone who joins a room during a game sees it live right away and plays in the next game. When all 4 seats are taken, the room card offers **Watch** instead (up to 8 spectators). Spectators get a free seat automatically when a game ends. While watching, the big field follows one player (tap a small field to switch), the controls are hidden and **Leave** returns to the room list. Spectators can chat.
 
-**Round stats:** after each game in a public room, everyone in the room (spectators too) gets a stats card in the Partyline chat, like the classic servers' end-of-game stats. Per player: place, time survived, pieces per minute (PPM), lines cleared, tetrises (4-line clears), lines sent and specials used/received. Below it are awards for the single best player (💣 top attacker: lines sent plus attacks on others; ⚡ fastest, needs 30 s of play; 🧱 most tetrises; no award on a tie) and 🎯 who hit you most. Ranked games also add to your all-time totals (lines, tetrises, average and best PPM, lines sent, specials used), shown under your rank on the Multiplayer screen. Lines and specials sent are counted by the server from the messages it relays; pieces, lines cleared and tetrises are counted by each phone (with sanity caps). Private rooms and games against bots don't show stats.
+**Round stats:** after each game in a public room, everyone in the room (spectators too) gets a stats card in the Partyline chat, like the classic servers' end-of-game stats. Per player: place, time survived, pieces per minute (PPM), lines cleared, rowbusts (4 lines cleared at once), lines sent and specials used/received. Below it are awards for the single best player (💣 top attacker: lines sent plus attacks on others; ⚡ fastest, needs 30 s of play; 💥 most rowbusts; no award on a tie) and 🎯 who hit you most. Ranked games also add to your all-time totals (lines, rowbusts, average and best PPM, lines sent, specials used), shown under your rank on the Multiplayer screen. Lines and specials sent are counted by the server from the messages it relays; pieces, lines cleared and rowbusts are counted by each phone (with sanity caps). Private rooms and games against bots don't show stats.
 
 These rooms run on a small server, `server/worker.js` (a Cloudflare Worker with one Durable Object), configured by `wrangler.jsonc`:
 - Phones connect to it with a WebSocket and it relays the game messages, so no phone-to-phone connection is needed (works on any network).

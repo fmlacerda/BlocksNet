@@ -11,23 +11,23 @@
  *    A device that was itself paused (app in background) does not judge others by it.
  *  - A guest whose link drops stays in the room and reconnects for up to 45 s; the host
  *    recognises the returning guest by a per-tab client id.
- *  - Every step is written to a small log (BN.net.diag()) shown under "Connection details".
+ *  - Every step is written to a small log (RB.net.diag()) shown under "Connection details".
  *
  * Transports:
  *  - PeerTransport: WebRTC data channels via PeerJS (js/vendor/peerjs.min.js).
  *    Uses the free PeerJS cloud server to introduce phones to each other, unless
  *    ?peerhost=…&peerport=…&peersecure=0|1&peerpath=… points at your own PeerServer.
- *    Extra TURN relays can be added in js/config.js (BN_CONFIG.turn).
+ *    Extra TURN relays can be added in js/config.js (RB_CONFIG.turn).
  *  - LocalTransport (?net=local): BroadcastChannel between tabs of one browser,
  *    for testing on a single computer.
  */
-(function (BN) {
+(function (RB) {
   'use strict';
 
   const PROTO = 1;
   const MAX_PLAYERS = 4;
   const CODE_CHARS = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
-  const ID_PREFIX = 'blocksnet-v1-';
+  const ID_PREFIX = 'rowbusters-v1-';
   const PING_MS = 4000;
   const DEAD_MS = 15000;
   const RECONNECT_FOR_MS = 45000;
@@ -47,17 +47,17 @@
       ms: n(m.ms),
       players: m.players.slice(0, 4).map(p => ({
         slot: p.slot | 0, name: cleanName(p.name), bot: !!p.bot, team: cleanTeam(p.team), win: !!p.win, place: p.place | 0, ms: n(p.ms),
-        pieces: n(p.pieces), ppm: n(p.ppm), lines: n(p.lines), tetrises: n(p.tetrises),
+        pieces: n(p.pieces), ppm: n(p.ppm), lines: n(p.lines), busts: n(p.busts),
         sent: n(p.sent), used: n(p.used), recv: n(p.recv), by: by(p.by),
       })),
-      awards: { attacker: a.attacker | 0, fastest: a.fastest | 0, tetris: a.tetris | 0 },
+      awards: { attacker: a.attacker | 0, fastest: a.fastest | 0, busts: a.busts | 0 },
     };
   };
   const rid = () => Math.random().toString(36).slice(2, 10);
 
   const params = new URLSearchParams(location.search);
   const JOIN_TIMEOUT = 20000;
-  const NO_DIRECT = "Couldn't connect to the host's phone. Check that the host still has BlocksNet open " +
+  const NO_DIRECT = "Couldn't connect to the host's phone. Check that the host still has Rowbusters open " +
     "on the room screen (not switched to another app), then tap Join again. If it keeps failing, put both " +
     'phones on the same Wi-Fi: some mobile networks block direct phone-to-phone connections.';
 
@@ -69,7 +69,7 @@
     DIAG.push(`${t}s  ${text}`);
     if (DIAG.length > 400) DIAG.shift();
   }
-  note(`BlocksNet ${BN.VERSION || '?'} · ${navigator.userAgent}`);
+  note(`Rowbusters ${RB.VERSION || '?'} · ${navigator.userAgent}`);
 
   // Log what the browser's WebRTC layer is doing for one data connection.
   function watchConnection(conn, who) {
@@ -127,7 +127,7 @@
       { urls: 'stun:stun.cloudflare.com:3478' },
       { urls: ['turn:eu-0.turn.peerjs.com:3478', 'turn:us-0.turn.peerjs.com:3478'], username: 'peerjs', credential: 'peerjsp' },
     ];
-    const extra = (window.BN_CONFIG && window.BN_CONFIG.turn) || [];
+    const extra = (window.RB_CONFIG && window.RB_CONFIG.turn) || [];
     return list.concat(extra);
   }
 
@@ -243,7 +243,7 @@
   const LocalTransport = {
     name: 'local',
     host(code, { onConnection, onReady }) {
-      const ch = new BroadcastChannel('blocksnet-room-' + code);
+      const ch = new BroadcastChannel('rowbusters-room-' + code);
       const conns = {};
       ch.onmessage = ({ data: d }) => {
         if (d.k === 'hello') {
@@ -264,7 +264,7 @@
       return () => { ch.postMessage({ k: 'bye', to: '*' }); ch.close(); };
     },
     join(code, { onOpen, onError }) {
-      const ch = new BroadcastChannel('blocksnet-room-' + code);
+      const ch = new BroadcastChannel('rowbusters-room-' + code);
       const post = m => { try { ch.postMessage(m); } catch (e) { /* channel already closed */ } };
       const id = 'tab-' + Math.random().toString(36).slice(2);
       const handlers = { msg: [], close: [] };
@@ -311,7 +311,7 @@
       this.teardown = null;
       this.closed = false;
       this.reconnecting = null;
-      try { this.cid = sessionStorage.getItem('bn.cid') || rid(); sessionStorage.setItem('bn.cid', this.cid); }
+      try { this.cid = sessionStorage.getItem('rb.cid') || rid(); sessionStorage.setItem('rb.cid', this.cid); }
       catch (e) { this.cid = rid(); }
     }
 
@@ -383,7 +383,7 @@
       if (g) g.rx = Date.now();
       if (m.t === 'ping') return;
       if (m.t === 'hello') {
-        if (m.v !== PROTO) { conn.send({ t: 'reject', reason: 'This room runs a different version of BlocksNet. Reload the page on both phones.' }); return; }
+        if (m.v !== PROTO) { conn.send({ t: 'reject', reason: 'This room runs a different version of Rowbusters. Reload the page on both phones.' }); return; }
         const cid = String(m.cid || conn.id).slice(0, 20);
         // A guest coming back after a dropped connection replaces its old, dead entry.
         let back = false;
@@ -487,7 +487,7 @@
           this.rx = Date.now();
           conn.onMessage(m => { this.rx = Date.now(); this.fromHost(m); });
           conn.onClose(() => this.lost(conn));
-          conn.send({ t: 'hello', v: PROTO, name: this.name, cid: this.cid, ver: BN.VERSION });
+          conn.send({ t: 'hello', v: PROTO, name: this.name, cid: this.cid, ver: RB.VERSION });
           this.startHeartbeat();
         },
         onError: (text, type) => {
@@ -518,7 +518,7 @@
       if (Date.now() > r.until) {
         note('guest: could not reconnect; giving up');
         this.close();
-        this.emit('closed', "Lost connection to the host and couldn't reconnect. Check that the host still has BlocksNet open.");
+        this.emit('closed', "Lost connection to the host and couldn't reconnect. Check that the host still has Rowbusters open.");
         return;
       }
       r.tries++;
@@ -596,18 +596,18 @@
 
   // ------------------------------------------------------------ public rooms (server)
   /*
-   * Public rooms run on the BlocksNet server (server/worker.js) instead of phone-to-phone:
+   * Public rooms run on the Rowbusters server (server/worker.js) instead of phone-to-phone:
    * every phone holds one WebSocket to the server, which relays messages, picks the host
    * (first player in the room), and decides when a game ends. Same events as Session.
    */
   function serverURL() {
-    const u = params.get('server') || (window.BN_CONFIG && window.BN_CONFIG.server) || '';
+    const u = params.get('server') || (window.RB_CONFIG && window.RB_CONFIG.server) || '';
     return u.replace(/\/+$/, '');
   }
   function playerId() {
     try {
-      let id = localStorage.getItem('bn.pid');
-      if (!id) { id = rid() + rid(); localStorage.setItem('bn.pid', id); }
+      let id = localStorage.getItem('rb.pid');
+      if (!id) { id = rid() + rid(); localStorage.setItem('rb.pid', id); }
       return id;
     } catch (e) { return rid() + rid(); }
   }
@@ -621,7 +621,7 @@
     catch (e) {
       // The browser hides the difference between "unreachable" and "something else answered
       // without permission for this page" (CORS), so say both.
-      const why = `no usable reply from ${base} – the server may be down, still deploying, or not the BlocksNet server (${e.message || e})`;
+      const why = `no usable reply from ${base} – the server may be down, still deploying, or not the Rowbusters server (${e.message || e})`;
       note('lobby: ' + why); throw new Error(why);
     }
     const body = await r.text();
@@ -629,7 +629,7 @@
     let data;
     try { data = JSON.parse(body); } catch (e) { data = null; }
     if (!data || !Array.isArray(data.rooms)) {
-      const why = `${base} is not running the BlocksNet server (it answered: "${body.slice(0, 60).replace(/\s+/g, ' ')}")`;
+      const why = `${base} is not running the Rowbusters server (it answered: "${body.slice(0, 60).replace(/\s+/g, ' ')}")`;
       note('lobby: ' + why); throw new Error(why);
     }
     return data;
@@ -666,7 +666,7 @@
       const base = serverURL().replace(/^http/, 'ws');
       let ws;
       try { ws = new WebSocket(`${base}/ws/room/${this.room}`); }
-      catch (e) { this.failed('Could not reach the BlocksNet server.'); return; }
+      catch (e) { this.failed('Could not reach the Rowbusters server.'); return; }
       const timer = setTimeout(() => { if (ws.readyState !== 1) { note('server: no answer within 12 s'); try { ws.close(); } catch (e) { /* ignore */ } ended_(0, 'timeout'); } }, 12000);
       let opened = false, ended = false;
       // Handle the end of this socket once, whether the browser reports it or we close it
@@ -679,7 +679,7 @@
         if (this.ws === ws) { this.ws = null; this.conn = null; }
         note(`server: connection closed (${code}${reason ? ' ' + reason : ''})`);
         if (this.closed) return;
-        if (!opened && !this.reconnecting) { this.failed("Couldn't reach the BlocksNet server. Check your internet connection and try again."); return; }
+        if (!opened && !this.reconnecting) { this.failed("Couldn't reach the Rowbusters server. Check your internet connection and try again."); return; }
         this.lost();
       };
       ws.onopen = () => {
@@ -688,7 +688,7 @@
         this.ws = ws;
         this.rx = Date.now();
         this.conn = { send: m => { try { if (ws.readyState === 1) ws.send(JSON.stringify(m)); } catch (e) { /* closing */ } }, close: () => { try { ws.close(); } catch (e) { /* ignore */ } ended_(1000, 'closed by this device'); } };
-        this.conn.send({ t: 'hello', v: PROTO, name: this.name, pid: this.pid, ver: BN.VERSION, watch: this.watch && !this.welcomed });
+        this.conn.send({ t: 'hello', v: PROTO, name: this.name, pid: this.pid, ver: RB.VERSION, watch: this.watch && !this.welcomed });
         this.startHeartbeat();
       };
       ws.onmessage = e => {
@@ -808,5 +808,5 @@
     }
   }
 
-  BN.net = { Session, ServerSession, fetchLobby, serverURL, playerId, transport: transport.name, cleanCode, cleanName, PROTO, diag: () => DIAG.join('\n'), note };
-})(window.BN);
+  RB.net = { Session, ServerSession, fetchLobby, serverURL, playerId, transport: transport.name, cleanCode, cleanName, PROTO, diag: () => DIAG.join('\n'), note };
+})(window.RB);
