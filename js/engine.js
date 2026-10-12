@@ -47,6 +47,7 @@
     normal: { label: 'Normal' },
     sns:    { label: 'SNS', desc: 'Sticks and squares only', short: 'Sticks & squares', types: ['I', 'O'] },
     fast:   { label: 'Fast', desc: '30% faster', short: '30% faster', speedUp: 1.3 },
+    teams:  { label: '2 vs 2', desc: 'Pick team A or B', short: 'Teams A vs B', teams: true },
   };
 
   // Special frequencies (percent).
@@ -518,7 +519,7 @@
       this.winner = null;
       this.lastSync = {};
       this.log('*** The game has started ***', 'system');
-      if (this.mode.desc) this.log(`*** ${this.mode.label}: ${this.mode.desc.toLowerCase()} ***`, 'system');
+      if (this.mode.desc && !this.mode.teams) this.log(`*** ${this.mode.label}: ${this.mode.desc.toLowerCase()} ***`, 'system');
       this.emit('start');
     }
 
@@ -655,7 +656,7 @@
   }
 
   global.BN = Object.assign(global.BN || {}, {
-    VERSION: '2026.10.11b',   // keep in sync with version.json (used for auto-update)
+    VERSION: '2026.10.12a',   // keep in sync with version.json (used for auto-update)
     W, H, MAX_INV, COLORS, SHAPES, SPECIAL_INFO, SPECIAL_FREQ, SPEEDS, MODES, DEFAULT_SETTINGS,
     Room, Player, BotBrain, pieceCells, isSpecial, encodeField, decodeField,
   });

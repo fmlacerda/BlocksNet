@@ -37,6 +37,7 @@
   // Names travel between phones and end up in the page, so keep them to safe characters.
   const cleanName = n => (String(n || '').replace(/[^\p{L}\p{N} _.\-]/gu, '').trim().slice(0, 12)) || 'Player';
   const cleanText = t => String(t || '').slice(0, 200);
+  const cleanTeam = t => (t === 'A' || t === 'B' ? t : '');
   // Round stats from the public-room server (numbers only, names cleaned).
   const cleanStats = m => {
     const n = v => Math.max(0, +v || 0);
@@ -45,7 +46,7 @@
     return {
       ms: n(m.ms),
       players: m.players.slice(0, 4).map(p => ({
-        slot: p.slot | 0, name: cleanName(p.name), bot: !!p.bot, win: !!p.win, place: p.place | 0, ms: n(p.ms),
+        slot: p.slot | 0, name: cleanName(p.name), bot: !!p.bot, team: cleanTeam(p.team), win: !!p.win, place: p.place | 0, ms: n(p.ms),
         pieces: n(p.pieces), ppm: n(p.ppm), lines: n(p.lines), tetrises: n(p.tetrises),
         sent: n(p.sent), used: n(p.used), recv: n(p.recv), by: by(p.by),
       })),
@@ -749,7 +750,7 @@
         case 'watch':
           note('server: watching the game in progress');
           this.emit('watch', {
-            players: (m.players || []).map(p => ({ slot: p.slot | 0, name: cleanName(p.name), owner: String(p.owner), bot: !!p.bot })),
+            players: (m.players || []).map(p => ({ slot: p.slot | 0, name: cleanName(p.name), owner: String(p.owner), bot: !!p.bot, team: cleanTeam(p.team) })),
             settings: m.settings, fields: Array.isArray(m.fields) ? m.fields : [], dead: Array.isArray(m.dead) ? m.dead.map(x => x | 0) : [], me: this.myId,
           });
           break;
@@ -762,11 +763,11 @@
           break;
         case 'role': this.isHost = !!m.host; note(`server: you are now ${this.isHost ? 'the host' : 'a guest'}`); this.emit('role', this.isHost); break;
         case 'reject': note(`server: rejected – ${m.reason}`); this.failed(String(m.reason || 'Could not join.')); break;
-        case 'lobby': this.emit('lobby', { code: this.code, players: (m.players || []).map(p => ({ name: cleanName(p.name), host: !!p.host })), watchers: (m.watchers || []).map(cleanName), mode: String(m.mode || 'normal') }); break;
+        case 'lobby': this.emit('lobby', { code: this.code, players: (m.players || []).map(p => ({ name: cleanName(p.name), host: !!p.host, team: cleanTeam(p.team), me: p.id === this.myId })), watchers: (m.watchers || []).map(cleanName), mode: String(m.mode || 'normal') }); break;
         case 'start':
           note('server: game started');
           this.emit('start', {
-            players: (m.players || []).map(p => ({ slot: p.slot | 0, name: cleanName(p.name), owner: String(p.owner), bot: !!p.bot, skill: +p.skill || 0.5 })),
+            players: (m.players || []).map(p => ({ slot: p.slot | 0, name: cleanName(p.name), owner: String(p.owner), bot: !!p.bot, team: cleanTeam(p.team), skill: +p.skill || 0.5 })),
             settings: m.settings, me: this.myId,
           });
           break;
@@ -781,6 +782,7 @@
       if (!this.isHost || !this.conn) return;
       this.conn.send({ t: 'start', settings, bots: botCount, skill: botSkill });
     }
+    setTeam(team) { if (this.conn) this.conn.send({ t: 'team', team }); }
     send(m) { if (this.conn) this.conn.send(m); }
     chat(text) {
       const t = cleanText(text).trim();

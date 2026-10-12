@@ -127,6 +127,10 @@
               <button class="bn-btn-secondary" id="bn-share" type="button">Invite</button>
             </div>
             <ol class="bn-plist" id="bn-plist"></ol>
+            <div class="bn-teams hidden" id="bn-teams">
+              <button type="button" data-team="A"></button>
+              <button type="button" data-team="B"></button>
+            </div>
             <div class="bn-chat" id="bn-chat" aria-live="polite"></div>
             <form class="bn-chat-form" id="bn-chat-form">
               <input id="bn-chat-in" maxlength="200" autocomplete="off" enterkeyhint="send" placeholder="Say something…">
@@ -284,7 +288,7 @@
       const name = sl => { const p = st.players.find(x => x.slot === sl); return p ? esc(p.name) : '?'; };
       const time = ms => { const sec = Math.round(ms / 1000); return `${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, '0')}`; };
       const place = p => p.win ? '&#127942;' : p.place;
-      const rows = st.players.map(p => `<tr class="${p.slot === mine ? 'you' : ''}"><td>${place(p)}</td><td class="nm">${esc(p.name)}${p.bot ? ' <i>bot</i>' : ''}</td>` +
+      const rows = st.players.map(p => `<tr class="${p.slot === mine ? 'you' : ''}"><td>${place(p)}</td><td class="nm">${p.team ? `<span class="bn-tm bn-tm-${p.team}">${p.team}</span> ` : ''}${esc(p.name)}${p.bot ? ' <i>bot</i>' : ''}</td>` +
         `<td>${time(p.ms)}</td><td>${p.ppm}</td><td>${p.lines}</td><td>${p.tetrises}</td><td>${p.sent}</td><td>${p.used}/${p.recv}</td></tr>`).join('');
       const aw = [], A = st.awards, P = sl => st.players.find(x => x.slot === sl);
       if (A.attacker) aw.push(`&#128163; Top attacker: <b>${name(A.attacker)}</b>`);
@@ -342,8 +346,21 @@
         if (!s.isHost && $('bn-on-join') && !$('bn-on-join').classList.contains('hidden')) openOnline('guest');
         $('bn-code-show').textContent = l.code || s.code;
         if (s.public) { const md = BN.MODES[l.mode]; $('bn-code-label').textContent = md && md.desc ? `${md.label} · ${md.desc}` : 'Public room'; }
-        $('bn-plist').innerHTML = l.players.map(p => `<li>${p.name}${p.host ? ' <em>host</em>' : ''}</li>`).join('')
+        const teamTag = t => (t ? `<span class="bn-tm bn-tm-${t}">${t}</span> ` : '');
+        $('bn-plist').innerHTML = l.players.map(p => `<li>${teamTag(p.team)}${p.name}${p.host ? ' <em>host</em>' : ''}</li>`).join('')
           + (l.watchers || []).map(n => `<li class="watcher">&#128065; ${n}</li>`).join('');
+        // Teams room: pick team A or B (between games; 2 players per team).
+        const teams = l.mode === 'teams', mine = l.players.find(p => p.me);
+        show('bn-teams', teams && !!mine);
+        if (teams && mine) {
+          $('bn-teams').querySelectorAll('button').forEach(b => {
+            const t = b.dataset.team, n = l.players.filter(p => p.team === t).length;
+            b.classList.toggle('on', mine.team === t);
+            b.classList.toggle('bn-tm-' + t, true);
+            b.disabled = mine.team !== t && n >= 2;
+            b.innerHTML = `Team ${t} <small>${mine.team === t ? 'your team' : n >= 2 ? 'full' : 'tap to join'} · ${n}/2</small>`;
+          });
+        }
         const free = MAX_PLAYERS - l.players.length;
         const fill = $('bn-fill');
         [...fill.options].forEach(o => { o.disabled = +o.value > free; });
@@ -357,7 +374,7 @@
         room.players = []; room.bots = [];
         for (const p of msg.players) {
           const mine = p.owner === msg.me;
-          room.addPlayer(p.name, { slot: p.slot, remote: !mine, bot: mine && p.bot, local: mine && !p.bot, skill: p.skill ?? 0.5 });
+          room.addPlayer(p.name, { slot: p.slot, remote: !mine, bot: mine && p.bot, local: mine && !p.bot, skill: p.skill ?? 0.5, team: p.team || '' });
         }
         app.me = room.players.find(p => p.isLocal) || room.players[0];
         room.net = s;
@@ -365,6 +382,10 @@
         config.onSetup && config.onSetup(app);
         show('bn-online', false);
         start();
+        if (app.me && app.me.team) {
+          const mates = room.players.filter(p => p !== app.me && p.team === app.me.team).map(p => p.name);
+          room.log(`*** You are team ${app.me.team}${mates.length ? ' with ' + mates.join(', ') : ''} ***`, 'system');
+        }
       });
       s.on('game', m => room.receive(m));
       s.on('watch', snap => { if (session === s) enterWatch(s, snap, true); });
@@ -464,7 +485,7 @@
     function enterWatch(s, msg, snapshot) {
       room.settings = sanitizeSettings(msg.settings);
       room.players = []; room.bots = [];
-      for (const p of msg.players) room.addPlayer(p.name, { slot: p.slot, remote: true });
+      for (const p of msg.players) room.addPlayer(p.name, { slot: p.slot, remote: true, team: p.team || '' });
       room.net = s;
       room.authority = false;
       setWatching(true);
@@ -511,6 +532,10 @@
       $('bn-code').addEventListener('input', e => { e.target.value = BN.net.cleanCode(e.target.value); });
       $('bn-code').addEventListener('keydown', e => { if (e.key === 'Enter') $('bn-join').click(); });
       $('bn-on-start').addEventListener('click', hostStart);
+      $('bn-teams').addEventListener('click', e => {
+        const b = e.target.closest('button[data-team]');
+        if (b && !b.disabled && !b.classList.contains('on') && session && session.setTeam) session.setTeam(b.dataset.team);
+      });
       $('bn-chat-form').addEventListener('submit', e => {
         e.preventDefault();
         if (session) session.chat($('bn-chat-in').value);
@@ -570,7 +595,7 @@
       if (youWon) haptic([30, 40, 30, 40, 80]);
       if (session) {
         setWatching(false);
-        roomChat(winner ? `*** ${winner.name} wins! ***` : '*** Game over ***', 'system');
+        roomChat(winner ? `*** ${winner.team ? 'Team ' + winner.team : winner.name} wins! ***` : '*** Game over ***', 'system');
         if (!session.isHost) roomChat('Waiting for the host to start the next game…', 'info');
         setTimeout(() => { if (session && !room.running) openOnline(session.isHost ? 'host' : 'guest'); }, 1500);
         return;

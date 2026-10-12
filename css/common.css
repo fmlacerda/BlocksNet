@@ -218,3 +218,11 @@ button { font: inherit; color: inherit; border: 0; background: none; cursor: poi
 /* Rooms with a special game mode (SNS, Fast) */
 .bn-rmode { font-size: 10px; color: var(--dim); margin-top: -3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .bn-rmode b { color: #111; background: #8fd3ff; border-radius: 4px; padding: 0 4px; margin-right: 3px; font-weight: 800; }
+/* Teams room (room 3): team badges and the A/B picker in the Partyline */
+.bn-tm { display: inline-block; min-width: 15px; text-align: center; border-radius: 4px; padding: 0 3px; font-size: 10px; font-weight: 800; color: #fff; line-height: 15px; }
+.bn-tm-A { background: #2f7bff; } .bn-tm-B { background: #e0533d; }
+.bn-teams { display: flex; gap: 8px; }
+.bn-teams button { flex: 1; padding: 8px 6px; border-radius: 10px; font-weight: 800; font-size: 14px; color: #fff; opacity: .55; border: 2px solid transparent; touch-action: manipulation; }
+.bn-teams button small { display: block; font-size: 10px; font-weight: 600; opacity: .9; }
+.bn-teams button.on { opacity: 1; border-color: #fff; }
+.bn-teams button:disabled { opacity: .25; }

@@ -11,7 +11,7 @@
 <link rel="icon" href="icon.svg">
 <link rel="apple-touch-icon" href="icon.svg">
 <title>BlocksNet</title>
-<link rel="stylesheet" href="css/common.css?v=20261011b">
+<link rel="stylesheet" href="css/common.css?v=20261012a">
 <style>
   /* Portrait layout for up to 4 players: a slim status line on top so the playfield gets
      the space, your field on the left, the 3 opponents stacked on the right, special bar and
@@ -46,6 +46,8 @@
   .opp .tag { display: flex; gap: 3px; align-items: baseline; font-size: 10px; line-height: 13px; overflow: hidden; white-space: nowrap; }
   .opp .tag b { background: var(--blue); color: #fff; border-radius: 3px; padding: 0 3px; }
   .opp .tag em { font-style: normal; color: var(--dim); overflow: hidden; text-overflow: ellipsis; }
+  .opp .tag b.tmA { background: #2f7bff; } .opp .tag b.tmB { background: #e0533d; }   /* teams room */
+  .opp.mate .tag em { color: #7dff8a; }
   .opp canvas { flex: 1; min-height: 0; }
 
   /* One blink of a coloured border when an opponent hits you with a special. */
@@ -151,13 +153,13 @@
     <form id="chatForm"><input id="chatIn" placeholder="Say something…" autocomplete="off"><button>Send</button></form>
   </div>
 
-<script src="js/engine.js?v=20261011b"></script>
-<script src="js/render.js?v=20261011b"></script>
-<script src="js/vendor/peerjs.min.js?v=20261011b"></script>
-<script src="js/config.js?v=20261011b"></script>
-<script src="js/net.js?v=20261011b"></script>
-<script src="js/sound.js?v=20261011b"></script>
-<script src="js/app.js?v=20261011b"></script>
+<script src="js/engine.js?v=20261012a"></script>
+<script src="js/render.js?v=20261012a"></script>
+<script src="js/vendor/peerjs.min.js?v=20261012a"></script>
+<script src="js/config.js?v=20261012a"></script>
+<script src="js/net.js?v=20261012a"></script>
+<script src="js/sound.js?v=20261012a"></script>
+<script src="js/app.js?v=20261012a"></script>
 <script>
 (function () {
   const R = BN.render;
@@ -171,7 +173,9 @@
     oppEls = app.room.players.filter(p => p !== app.me).map(p => {
       const el = document.createElement('div');
       el.className = 'opp';
-      el.innerHTML = `<div class="tag"><b>${p.slot}</b><em>${p.name}</em></div><canvas></canvas>`;
+      const mate = p.team && app.me && p.team === app.me.team;
+      el.innerHTML = `<div class="tag"><b class="${p.team ? 'tm' + p.team : ''}">${p.slot}${p.team || ''}</b><em>${mate ? 'partner · ' : ''}${p.name}</em></div><canvas></canvas>`;
+      if (mate) el.classList.add('mate');
       el.addEventListener('click', () => (app.watching ? app.follow(p) : app.act.use(p.slot)));
       box.appendChild(el);
       return { p, el, canvas: el.querySelector('canvas') };

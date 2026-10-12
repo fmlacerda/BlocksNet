@@ -2,7 +2,9 @@
  * BlocksNet game server (Cloudflare Worker + one Durable Object).
  *
  * - Six public rooms (1-6), up to 4 players each. Rooms 1-4 play normal games, room 5 is
- *   SNS (sticks and squares only) and room 6 is Fast (30% faster); the room sets the mode.
+ *   SNS (sticks and squares only) and room 6 is Fast (30% faster); room 3 is Teams (2 vs 2:
+ *   each player picks team A or B, lines go only to the other team, the last team standing
+ *   wins). The room sets the mode.
  *   Players connect with a WebSocket to /ws/room/<n>. The first player in a room is its host: the host starts games and runs
  *   the bots; if the host leaves, the next player becomes host.
  * - The server relays game messages between the players in a room (each phone still
@@ -21,7 +23,7 @@
  */
 import { DurableObject } from 'cloudflare:workers';
 
-const SERVER_VERSION = '2026.10.11b';   // shown on /health, to check which code is deployed
+const SERVER_VERSION = '2026.10.12a';   // shown on /health, to check which code is deployed
 const ROOMS = 6;
 const MAX_PLAYERS = 4;
 const MAX_WATCHERS = 8;
@@ -32,8 +34,10 @@ const SPEEDS = ['relaxed', 'classic', 'fast', 'turbo', 'insane'];
 const GAME_TYPES = ['f', 'lines', 'special', 'dead'];
 const HOSTILE = 'arsbqo';   // specials that hurt the target (same as the game's 'hostile' flag)
 const MIN_SPEED_MS = 30000;   // speed awards and best speed need at least this much play
-// Game mode of each room (rooms 1-4 normal; 5 = SNS, sticks and squares only; 6 = Fast, 30% faster).
-const ROOM_MODES = ['normal', 'normal', 'normal', 'normal', 'sns', 'fast'];
+// Game mode of each room (rooms 1, 2, 4 normal; 3 = Teams 2 vs 2; 5 = SNS, sticks and squares only; 6 = Fast, 30% faster).
+const ROOM_MODES = ['normal', 'normal', 'teams', 'normal', 'sns', 'fast'];
+const TEAMS = ['A', 'B'];
+const TEAM_SIZE = 2;
 const WEEK_MS = 7 * 24 * 3600 * 1000;
 
 const cleanName = n => (String(n || '').replace(/[^\p{L}\p{N} _.\-]/gu, '').trim().slice(0, 12)) || 'Player';
@@ -159,9 +163,10 @@ export class Hub extends DurableObject {
       // the grace period): hand their seat and players in the running game to the new link.
       const old = room.clients.concat(room.watchers).find(x => x.pid === c.pid);
       let resumeFrom = null;
+      if (old && old.team) c.team = old.team;
       if (old) { resumeFrom = old.id; this.leave(old, true); try { old.ws.close(1000, 'replaced'); } catch (e) { /* ignore */ } }
       const away = room.game && room.game.away.get(c.pid);
-      if (away) { resumeFrom = away.oldId; clearTimeout(away.timer); room.game.away.delete(c.pid); }
+      if (away) { resumeFrom = away.oldId; if (away.team) c.team = away.team; clearTimeout(away.timer); room.game.away.delete(c.pid); }
       let resumed = false;
       if (room.game && resumeFrom) {
         for (const [slot, owner] of room.game.owners) if (owner === resumeFrom) { room.game.owners.set(slot, c.id); resumed = true; }
@@ -173,6 +178,7 @@ export class Hub extends DurableObject {
       c.spectator = watch;
       if (watch) room.watchers.push(c); else room.clients.push(c);
       if (!watch && !room.hostId) room.hostId = c.id;
+      if (!watch) this.pickTeam(room, c);
       this.send(c, { t: 'welcome', id: c.id, room: room.n, host: room.hostId === c.id, playing: !!room.game, spectator: watch, resumed });
       this.system(room, resumed ? `${c.name} reconnected – the game goes on` : `${c.name} ${old || away ? 'is back in' : watch ? 'is watching' : 'joined'} the room`);
       if (room.game && !resumed) this.sendSnapshot(room, c);
@@ -186,15 +192,33 @@ export class Hub extends DurableObject {
         return;
       }
       case 'start': return this.start(c, m);
+      case 'team': {
+        // Switch team between games, if that team has room.
+        if (room.mode !== 'teams' || c.spectator || room.game || !TEAMS.includes(m.team) || c.team === m.team) return;
+        if (room.clients.filter(x => x.team === m.team).length >= TEAM_SIZE) return;
+        c.team = m.team;
+        this.system(room, `${c.name} joined team ${c.team}`);
+        this.broadcastLobby(room);
+        return;
+      }
       default:
         if (!GAME_TYPES.includes(m.t) || !room.game) return;
         this.gameMessage(c, m);
     }
   }
 
+  // Teams room: a new player goes to the team with fewer players (keeps their team if they had one).
+  pickTeam(room, c) {
+    if (room.mode !== 'teams') { c.team = ''; return; }
+    const size = t => room.clients.filter(x => x !== c && x.team === t).length;
+    if (TEAMS.includes(c.team) && size(c.team) < TEAM_SIZE) return;
+    c.team = size('A') <= size('B') ? 'A' : 'B';
+  }
+
   start(c, m) {
     const room = c.room;
     if (room.hostId !== c.id || room.game) return;
+    const teams = room.mode === 'teams';
     const s = m.settings || {};
     const settings = {
       speed: SPEEDS.includes(s.speed) ? s.speed : 'classic',
@@ -202,11 +226,24 @@ export class Hub extends DurableObject {
       linesPerLevel: Math.max(1, Math.min(20, s.linesPerLevel | 0 || 2)),
       mode: room.mode,                                  // set by the room, not the host
     };
-    const players = room.clients.map((x, i) => ({ slot: i + 1, name: x.name, owner: x.id, pid: x.pid }));
+    const players = room.clients.map(x => ({ name: x.name, owner: x.id, pid: x.pid, team: teams ? x.team : undefined }));
     const names = BOT_NAMES.slice().sort(() => Math.random() - 0.5);
     const bots = Math.max(0, Math.min(MAX_PLAYERS - players.length, m.bots | 0));
     const skill = Math.max(0, Math.min(1, +m.skill || 0.5));
-    for (let i = 0; i < bots; i++) players.push({ slot: players.length + 1, name: names[i], owner: c.id, bot: true, skill });
+    for (let i = 0; i < bots; i++) {
+      const bot = { name: names[i], owner: c.id, bot: true, skill };
+      // Bots join the smaller team.
+      if (teams) bot.team = players.filter(p => p.team === 'A').length <= players.filter(p => p.team === 'B').length ? 'A' : 'B';
+      players.push(bot);
+    }
+    if (teams) {
+      if (TEAMS.some(t => !players.some(p => p.team === t))) {
+        this.send(c, { t: 'chat', system: true, text: 'Both teams need at least one player. Add a bot or ask someone to switch team.' });
+        return;
+      }
+      players.sort((a, b) => a.team.localeCompare(b.team));   // team A takes slots 1-2, team B the rest
+    }
+    players.forEach((p, i) => { p.slot = i + 1; });
     room.game = { players, settings, alive: new Set(players.map(p => p.slot)), owners: new Map(players.map(p => [p.slot, p.owner])), lastF: new Map(), away: new Map(), started: Date.now(),
       stats: new Map(players.map(p => [p.slot, { pieces: 0, lines: 0, tet: 0, sent: 0, used: 0, recv: 0, by: {}, died: 0 }])) };
     this.toRoom(room, { t: 'start', players: players.map(({ pid, ...p }) => p), settings });
@@ -258,17 +295,17 @@ export class Hub extends DurableObject {
 
   // The stats card everyone in the room sees after a game: winner first, then the
   // others in reverse order of elimination.
-  roundStats(g, winner) {
+  roundStats(g, winner, winTeam) {
     const now = Date.now();
     const rows = g.players.map(p => {
       const st = g.stats.get(p.slot);
       const ms = Math.max(1000, (st.died || now) - g.started);
       return {
-        slot: p.slot, name: p.name, bot: !!p.bot, win: p.slot === winner, ms,
+        slot: p.slot, name: p.name, bot: !!p.bot, team: p.team || '', win: winTeam ? p.team === winTeam : p.slot === winner, ms,
         pieces: st.pieces, ppm: Math.round(st.pieces / (ms / 60000)), lines: st.lines, tetrises: st.tet,
         sent: st.sent, used: st.used, recv: st.recv, by: st.by, out: st.died || now + (p.slot === winner ? 1 : 0),
       };
-    }).sort((a, b) => b.out - a.out);
+    }).sort((a, b) => (b.win - a.win) || (b.out - a.out));
     rows.forEach((r, i) => { r.place = i + 1; delete r.out; });
     // Award goes to the single best player (no award on a tie or when nobody scored).
     const best = (key, among = rows) => {
@@ -287,14 +324,18 @@ export class Hub extends DurableObject {
   checkEnd(room) {
     const g = room.game;
     if (!g) return;
-    if (g.alive.size > 1 || (g.alive.size === 1 && g.players.length === 1)) return;
-    const winner = g.alive.size === 1 ? [...g.alive][0] : 0;
+    // Over when everyone left alive is on one side (one player, or one team).
+    const side = sl => { const p = g.players.find(x => x.slot === sl); return (p && p.team) || '#' + sl; };
+    const sides = new Set([...g.alive].map(side));
+    if (sides.size > 1 || (g.alive.size === 1 && g.players.length === 1)) return;
+    const winner = g.alive.size ? [...g.alive][0] : 0;
     for (const a of g.away.values()) clearTimeout(a.timer);
     room.game = null;
-    this.toRoom(room, { t: 'end', winner });
-    const stats = this.roundStats(g, winner);
+    const winTeam = (winner && g.players.find(p => p.slot === winner).team) || '';
+    this.toRoom(room, { t: 'end', winner, team: winTeam || undefined });
+    const stats = this.roundStats(g, winner, winTeam);
     this.toRoom(room, stats);
-    this.record(g, winner, stats);
+    this.record(g, winner, stats, winTeam);
     this.seatWatchers(room);
     this.broadcastLobby(room);
   }
@@ -305,18 +346,19 @@ export class Hub extends DurableObject {
       const w = room.watchers.shift();
       w.spectator = false;
       room.clients.push(w);
+      this.pickTeam(room, w);
       if (!room.hostId) room.hostId = w.id;
       this.send(w, { t: 'seat', host: room.hostId === w.id });
       this.system(room, `${w.name} took a free seat`);
     }
   }
 
-  record(g, winner, stats) {
+  record(g, winner, stats, winTeam) {
     const humans = g.players.filter(p => !p.bot && p.pid);
     if (humans.length < 2) return;                      // vs-bots games don't count
     const now = Date.now();
     for (const p of humans) {
-      const win = p.slot === winner ? 1 : 0;
+      const win = (winTeam ? p.team === winTeam : p.slot === winner) ? 1 : 0;
       const r = stats.players.find(x => x.slot === p.slot);
       const ppm = r.ms >= MIN_SPEED_MS ? r.ppm : 0;     // too short a game for a meaningful speed
       this.sql.exec(`INSERT INTO players (pid, name, wins, games, updated, pieces, lines, tetrises, sent, specials, play_ms, best_ppm)
@@ -350,7 +392,7 @@ export class Hub extends DurableObject {
       if (code !== 1000) {
         // Dropped (network blip, app in background…): keep their players for a few seconds.
         held = true;
-        g.away.set(c.pid, { oldId: c.id, name: c.name, timer: setTimeout(() => this.expire(room, c.pid), GRACE_MS) });
+        g.away.set(c.pid, { oldId: c.id, name: c.name, team: c.team, timer: setTimeout(() => this.expire(room, c.pid), GRACE_MS) });
         this.system(room, `${c.name} lost connection – waiting ${GRACE_MS / 1000} s for them to come back`);
       } else this.knockOut(room, c.id);       // left on purpose: out now
     }
@@ -397,7 +439,7 @@ export class Hub extends DurableObject {
   }
 
   broadcastLobby(room) {
-    const players = room.clients.map(x => ({ name: x.name, host: x.id === room.hostId }));
+    const players = room.clients.map(x => ({ id: x.id, name: x.name, host: x.id === room.hostId, team: x.team || undefined }));
     this.toRoom(room, { t: 'lobby', code: `Room ${room.n}`, mode: room.mode, players, watchers: room.watchers.map(x => x.name), playing: !!room.game });
   }
 }
