@@ -226,3 +226,5 @@ button { font: inherit; color: inherit; border: 0; background: none; cursor: poi
 .bn-teams button small { display: block; font-size: 10px; font-weight: 600; opacity: .9; }
 .bn-teams button.on { opacity: 1; border-color: #fff; }
 .bn-teams button:disabled { opacity: .25; }
+/* An odd last room card (room 7) spans the full width of the 2-column grid */
+.bn-rooms .bn-rcard:last-child:nth-child(odd) { grid-column: 1 / -1; }

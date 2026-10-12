@@ -42,12 +42,13 @@
   };
   const DEFAULT_SETTINGS = { speed: 'classic', startLevel: 1, linesPerLevel: 2, mode: 'normal' };
 
-  // Game modes (the public rooms 5 and 6 always use SNS and Fast).
+  // Game modes (public rooms 3, 5, 6 and 7 always use Teams, SNS, Fast and Pure).
   const MODES = {
     normal: { label: 'Normal' },
     sns:    { label: 'SNS', desc: 'Sticks and squares only', short: 'Sticks & squares', types: ['I', 'O'] },
     fast:   { label: 'Fast', desc: '30% faster', short: '30% faster', speedUp: 1.3 },
     teams:  { label: '2 vs 2', desc: 'Pick team A or B', short: 'Teams A vs B', teams: true },
+    pure:   { label: 'Pure', desc: 'No specials, only lines', short: 'No specials', noSpecials: true },
   };
 
   // Special frequencies (percent).
@@ -246,7 +247,7 @@
       const st = this.room.settings;
       this.level = st.startLevel + Math.floor(this.lines / st.linesPerLevel);
       this.room.onLinesCleared(this, cleared);
-      for (let i = 0; i < cleared; i++) this.addSpecialToField();
+      if (!this.room.mode.noSpecials) for (let i = 0; i < cleared; i++) this.addSpecialToField();
     }
 
     addSpecialToField() {
@@ -656,7 +657,7 @@
   }
 
   global.BN = Object.assign(global.BN || {}, {
-    VERSION: '2026.10.12a',   // keep in sync with version.json (used for auto-update)
+    VERSION: '2026.10.12b',   // keep in sync with version.json (used for auto-update)
     W, H, MAX_INV, COLORS, SHAPES, SPECIAL_INFO, SPECIAL_FREQ, SPEEDS, MODES, DEFAULT_SETTINGS,
     Room, Player, BotBrain, pieceCells, isSpecial, encodeField, decodeField,
   });

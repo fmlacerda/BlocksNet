@@ -1,10 +1,11 @@
 /*
  * BlocksNet game server (Cloudflare Worker + one Durable Object).
  *
- * - Six public rooms (1-6), up to 4 players each. Rooms 1-4 play normal games, room 5 is
+ * - Seven public rooms (1-7), up to 4 players each. Rooms 1, 2 and 4 play normal games, room 5 is
  *   SNS (sticks and squares only) and room 6 is Fast (30% faster); room 3 is Teams (2 vs 2:
  *   each player picks team A or B, lines go only to the other team, the last team standing
- *   wins). The room sets the mode.
+ *   wins); room 7 is Pure (no specials, only the lines sent for clearing 2+ at once).
+ *   The room sets the mode.
  *   Players connect with a WebSocket to /ws/room/<n>. The first player in a room is its host: the host starts games and runs
  *   the bots; if the host leaves, the next player becomes host.
  * - The server relays game messages between the players in a room (each phone still
@@ -23,8 +24,8 @@
  */
 import { DurableObject } from 'cloudflare:workers';
 
-const SERVER_VERSION = '2026.10.12a';   // shown on /health, to check which code is deployed
-const ROOMS = 6;
+const SERVER_VERSION = '2026.10.12b';   // shown on /health, to check which code is deployed
+const ROOMS = 7;
 const MAX_PLAYERS = 4;
 const MAX_WATCHERS = 8;
 const GRACE_MS = 10000;   // a player who drops mid-game keeps their seat this long
@@ -34,8 +35,9 @@ const SPEEDS = ['relaxed', 'classic', 'fast', 'turbo', 'insane'];
 const GAME_TYPES = ['f', 'lines', 'special', 'dead'];
 const HOSTILE = 'arsbqo';   // specials that hurt the target (same as the game's 'hostile' flag)
 const MIN_SPEED_MS = 30000;   // speed awards and best speed need at least this much play
-// Game mode of each room (rooms 1, 2, 4 normal; 3 = Teams 2 vs 2; 5 = SNS, sticks and squares only; 6 = Fast, 30% faster).
-const ROOM_MODES = ['normal', 'normal', 'teams', 'normal', 'sns', 'fast'];
+// Game mode of each room (rooms 1, 2, 4 normal; 3 = Teams 2 vs 2; 5 = SNS, sticks and squares only;
+// 6 = Fast, 30% faster; 7 = Pure, no specials).
+const ROOM_MODES = ['normal', 'normal', 'teams', 'normal', 'sns', 'fast', 'pure'];
 const TEAMS = ['A', 'B'];
 const TEAM_SIZE = 2;
 const WEEK_MS = 7 * 24 * 3600 * 1000;
@@ -266,6 +268,7 @@ export class Hub extends DurableObject {
     const room = c.room, g = room.game;
     const slot = m.t === 'f' || m.t === 'dead' ? m.slot : m.from;
     if (g.owners.get(slot) !== c.id) return;            // only for your own players
+    if (m.t === 'special' && g.settings.mode === 'pure') return;   // no specials in Pure games
     if (m.t === 'f') g.lastF.set(slot, m);
     this.track(g, slot, m);
     this.toRoom(room, m, c);
