@@ -38,6 +38,15 @@
   const cleanName = n => (String(n || '').replace(/[^\p{L}\p{N} _.\-]/gu, '').trim().slice(0, 12)) || 'Player';
   const cleanText = t => String(t || '').slice(0, 200);
   const cleanTeam = t => (t === 'A' || t === 'B' ? t : '');
+  const cleanDev = d => (d === 'phone' || d === 'computer' ? d : '');
+  // 'phone' for touch devices (phones and tablets), else 'computer'. Shown as an icon to others.
+  function deviceKind() {
+    try {
+      const touch = matchMedia('(pointer: coarse)').matches || /iPhone|iPad|Android|Mobi/i.test(navigator.userAgent)
+        || (navigator.maxTouchPoints > 1 && /Macintosh/.test(navigator.userAgent));   // iPad asking for desktop sites
+      return touch ? 'phone' : 'computer';
+    } catch (e) { return ''; }
+  }
   // Round stats from the public-room server (numbers only, names cleaned).
   const cleanStats = m => {
     const n = v => Math.max(0, +v || 0);
@@ -46,7 +55,7 @@
     return {
       ms: n(m.ms),
       players: m.players.slice(0, 4).map(p => ({
-        slot: p.slot | 0, name: cleanName(p.name), bot: !!p.bot, team: cleanTeam(p.team), win: !!p.win, place: p.place | 0, ms: n(p.ms),
+        slot: p.slot | 0, name: cleanName(p.name), bot: !!p.bot, dev: cleanDev(p.dev), team: cleanTeam(p.team), win: !!p.win, place: p.place | 0, ms: n(p.ms),
         pieces: n(p.pieces), ppm: n(p.ppm), lines: n(p.lines), busts: n(p.busts),
         sent: n(p.sent), used: n(p.used), recv: n(p.recv), by: by(p.by),
       })),
@@ -688,7 +697,7 @@
         this.ws = ws;
         this.rx = Date.now();
         this.conn = { send: m => { try { if (ws.readyState === 1) ws.send(JSON.stringify(m)); } catch (e) { /* closing */ } }, close: () => { try { ws.close(); } catch (e) { /* ignore */ } ended_(1000, 'closed by this device'); } };
-        this.conn.send({ t: 'hello', v: PROTO, name: this.name, pid: this.pid, ver: RB.VERSION, watch: this.watch && !this.welcomed });
+        this.conn.send({ t: 'hello', v: PROTO, name: this.name, pid: this.pid, ver: RB.VERSION, dev: deviceKind(), watch: this.watch && !this.welcomed });
         this.startHeartbeat();
       };
       ws.onmessage = e => {
@@ -763,7 +772,7 @@
           break;
         case 'role': this.isHost = !!m.host; note(`server: you are now ${this.isHost ? 'the host' : 'a guest'}`); this.emit('role', this.isHost); break;
         case 'reject': note(`server: rejected – ${m.reason}`); this.failed(String(m.reason || 'Could not join.')); break;
-        case 'lobby': this.emit('lobby', { code: this.code, players: (m.players || []).map(p => ({ name: cleanName(p.name), host: !!p.host, team: cleanTeam(p.team), me: p.id === this.myId })), watchers: (m.watchers || []).map(cleanName), mode: String(m.mode || 'normal') }); break;
+        case 'lobby': this.emit('lobby', { code: this.code, players: (m.players || []).map(p => ({ name: cleanName(p.name), host: !!p.host, dev: cleanDev(p.dev), team: cleanTeam(p.team), me: p.id === this.myId })), watchers: (m.watchers || []).map(cleanName), mode: String(m.mode || 'normal') }); break;
         case 'start':
           note('server: game started');
           this.emit('start', {
@@ -808,5 +817,5 @@
     }
   }
 
-  RB.net = { Session, ServerSession, fetchLobby, serverURL, playerId, transport: transport.name, cleanCode, cleanName, PROTO, diag: () => DIAG.join('\n'), note };
+  RB.net = { Session, ServerSession, fetchLobby, serverURL, playerId, deviceKind, transport: transport.name, cleanCode, cleanName, PROTO, diag: () => DIAG.join('\n'), note };
 })(window.RB);

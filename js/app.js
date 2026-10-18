@@ -70,6 +70,16 @@
   const LOGO = `<span class="rb-mark-wrap">${MARK}</span><span class="rb-word"><b>ROW</b>BUSTERS</span>`;
   RB.LOGO = LOGO;
 
+  // Device icons for the round stats, the ranking and the Partyline player list.
+  const DEV_SVG = {
+    phone: '<svg viewBox="0 0 16 16" aria-hidden="true"><rect x="4.5" y="1.5" width="7" height="13" rx="1.6"/><path d="M7 12.2h2"/></svg>',
+    computer: '<svg viewBox="0 0 16 16" aria-hidden="true"><rect x="2.5" y="3" width="11" height="7.5" rx="1"/><path d="M1 13h14"/></svg>',
+  };
+  const DEV_LABEL = { phone: 'Phone or tablet', computer: 'Computer' };
+  const devIcon = d => (DEV_SVG[d] ? `<span class="rb-dev" title="${DEV_LABEL[d]}" role="img" aria-label="${DEV_LABEL[d]}">${DEV_SVG[d]}</span>` : '');
+  // Ranking rows carry a bit mask of every device the player has played ranked games on.
+  const devIcons = mask => (mask & 1 ? devIcon('phone') : '') + (mask & 2 ? devIcon('computer') : '');
+
   function lobbyHTML(title, subtitle) {
     const s = Object.assign({}, DEFAULTS, store.get('settings', {}));
     s.bots = Math.max(1, Math.min(MAX_PLAYERS - 1, s.bots | 0));
@@ -299,7 +309,7 @@
       const name = sl => { const p = st.players.find(x => x.slot === sl); return p ? esc(p.name) : '?'; };
       const time = ms => { const sec = Math.round(ms / 1000); return `${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, '0')}`; };
       const place = p => p.win ? '&#127942;' : p.place;
-      const rows = st.players.map(p => `<tr class="${p.slot === mine ? 'you' : ''}"><td>${place(p)}</td><td class="nm">${p.team ? `<span class="rb-tm rb-tm-${p.team}">${p.team}</span> ` : ''}${esc(p.name)}${p.bot ? ' <i>bot</i>' : ''}</td>` +
+      const rows = st.players.map(p => `<tr class="${p.slot === mine ? 'you' : ''}"><td>${place(p)}</td><td class="nm">${p.team ? `<span class="rb-tm rb-tm-${p.team}">${p.team}</span> ` : ''}${esc(p.name)}${p.bot ? ' <i>bot</i>' : devIcon(p.dev)}</td>` +
         `<td>${time(p.ms)}</td><td>${p.ppm}</td><td>${p.lines}</td><td>${p.busts}</td><td>${p.sent}</td><td>${p.used}/${p.recv}</td></tr>`).join('');
       const aw = [], A = st.awards, P = sl => st.players.find(x => x.slot === sl);
       if (A.attacker) aw.push(`&#128163; Top attacker: <b>${name(A.attacker)}</b>`);
@@ -358,7 +368,7 @@
         $('rb-code-show').textContent = l.code || s.code;
         if (s.public) { const md = RB.MODES[l.mode]; $('rb-code-label').textContent = md && md.desc ? `${md.label} · ${md.desc}` : 'Public room'; }
         const teamTag = t => (t ? `<span class="rb-tm rb-tm-${t}">${t}</span> ` : '');
-        $('rb-plist').innerHTML = l.players.map(p => `<li>${teamTag(p.team)}${p.name}${p.host ? ' <em>host</em>' : ''}</li>`).join('')
+        $('rb-plist').innerHTML = l.players.map(p => `<li>${teamTag(p.team)}${p.name}${devIcon(p.dev)}${p.host ? ' <em>host</em>' : ''}</li>`).join('')
           + (l.watchers || []).map(n => `<li class="watcher">&#128065; ${n}</li>`).join('');
         // Teams room: pick team A or B (between games; 2 players per team).
         const teams = l.mode === 'teams', mine = l.players.find(p => p.me);
@@ -471,7 +481,7 @@
       }).join('');
       const list = d[mpPeriod] || [];
       $('rb-rank-list').innerHTML = list.length ? list.map((p, i) =>
-        `<li class="${p.you ? 'you' : ''}"><span class="n">${i + 1}</span><span class="who">${esc(p.name)}</span><span class="w">${p.wins}<small>${p.games} game${p.games === 1 ? '' : 's'}</small></span></li>`).join('')
+        `<li class="${p.you ? 'you' : ''}"><span class="n">${i + 1}</span><span class="who">${esc(p.name)}${devIcons(p.devices | 0)}</span><span class="w">${p.wins}<small>${p.games} game${p.games === 1 ? '' : 's'}</small></span></li>`).join('')
         : '<li class="empty">No ranked games yet. Win a game with 2+ players to get here.</li>';
     }
     function joinPublic(n, watch = false) {
@@ -694,7 +704,7 @@
     let lastTouch = 0;
     document.addEventListener('touchend', e => {
       const now = Date.now();
-      if (now - lastTouch < 300 && !e.target.closest('input,select,button,a')) e.preventDefault();
+      if (now - lastTouch < 300 && !e.target.closest('input,select,button,a,.opp')) e.preventDefault();
       lastTouch = now;
     }, { passive: false });
 

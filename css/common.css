@@ -243,3 +243,7 @@ button { font: inherit; color: inherit; border: 0; background: none; cursor: poi
 /* An odd last room card (room 7) spans the full width of the 2-column grid */
 .rb-rooms .rb-rcard:last-child:nth-child(odd) { grid-column: 1 / -1; }
 .rb-chat .log-system { font-weight: 600; }
+/* Phone / computer icon next to a player's name */
+.rb-dev { display: inline-flex; vertical-align: -1px; margin-left: 4px; color: var(--dim); }
+.rb-dev svg { width: 11px; height: 11px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; }
+.rb-rank li .rb-dev svg { width: 12px; height: 12px; }

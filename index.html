@@ -14,7 +14,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bungee&family=Space+Grotesk:wght@400;500;600;700&display=swap">
-<link rel="stylesheet" href="css/common.css?v=20261012d">
+<link rel="stylesheet" href="css/common.css?v=20261018a">
 <style>
   /* Portrait layout for up to 4 players: a slim status line on top so the playfield gets
      the space, your field on the left, the 3 opponents stacked on the right, special bar and
@@ -53,6 +53,10 @@
   .opp .tag b.tmA { background: #2f7bff; } .opp .tag b.tmB { background: #e0533d; }   /* teams room */
   .opp.mate .tag em { color: var(--accent); }
   .opp canvas { flex: 1; min-height: 0; }
+  .opp { cursor: pointer; }
+  /* Brief lime flash on the opponent you just fired a special at. */
+  .opp.fired canvas { animation: fired .35s ease-out 1; }
+  @keyframes fired { 0% { box-shadow: 0 0 0 2px var(--accent), 0 0 14px 2px var(--accent); } 100% { box-shadow: 0 0 0 0 transparent; } }
 
   /* One blink of a coloured border when an opponent hits you with a special. */
   .me::after, .opp::after {
@@ -193,13 +197,13 @@
     <form id="chatForm"><input id="chatIn" placeholder="Say something…" autocomplete="off"><button>Send</button></form>
   </div>
 
-<script src="js/engine.js?v=20261012d"></script>
-<script src="js/render.js?v=20261012d"></script>
-<script src="js/vendor/peerjs.min.js?v=20261012d"></script>
-<script src="js/config.js?v=20261012d"></script>
-<script src="js/net.js?v=20261012d"></script>
-<script src="js/sound.js?v=20261012d"></script>
-<script src="js/app.js?v=20261012d"></script>
+<script src="js/engine.js?v=20261018a"></script>
+<script src="js/render.js?v=20261018a"></script>
+<script src="js/vendor/peerjs.min.js?v=20261018a"></script>
+<script src="js/config.js?v=20261018a"></script>
+<script src="js/net.js?v=20261018a"></script>
+<script src="js/sound.js?v=20261018a"></script>
+<script src="js/app.js?v=20261018a"></script>
 <script>
 (function () {
   const R = RB.render;
@@ -217,7 +221,17 @@
       const mate = p.team && app.me && p.team === app.me.team;
       el.innerHTML = `<div class="tag"><b class="${p.team ? 'tm' + p.team : ''}">${p.slot}${p.team || ''}</b><em>${mate ? 'partner · ' : ''}${p.name}</em></div><canvas></canvas>`;
       if (mate) el.classList.add('mate');
-      el.addEventListener('click', () => (app.watching ? app.follow(p) : app.act.use(p.slot)));
+      // Tap an opponent's field to fire your next special at them. It reacts on touch-down, like
+      // the buttons: a 'click' arrives late on phones and is dropped right after a button press.
+      el.addEventListener('pointerdown', e => {
+        if (e.pointerType === 'mouse' && e.button !== 0) return;
+        e.preventDefault();
+        if (app.watching) { app.follow(p); return; }
+        if (app.act.use(p.slot)) {
+          el.classList.remove('fired'); void el.offsetWidth; el.classList.add('fired');
+          try { navigator.vibrate && navigator.vibrate(15); } catch (err) { /* not supported */ }
+        }
+      });
       box.appendChild(el);
       return { p, el, canvas: el.querySelector('canvas') };
     });
@@ -287,7 +301,7 @@
   const app = RB.app({
     title: 'Up to 4 players',
     orientation: 'portrait',
-    subtitle: 'Buttons to move, rotate and drop. Number buttons 1–4 fire your first special at that player, D discards it. You can also tap an opponent field to target it.',
+    subtitle: 'Buttons to move, rotate and drop. Number buttons 1–4 fire your first special at that player, D discards it. Or tap an opponent’s field to fire it at them.',
     onSetup: buildOpps,
     render(app) {
       const me = app.me;

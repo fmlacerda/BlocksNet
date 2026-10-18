@@ -24,7 +24,7 @@
  */
 import { DurableObject } from 'cloudflare:workers';
 
-const SERVER_VERSION = '2026.10.12d';   // shown on /health, to check which code is deployed
+const SERVER_VERSION = '2026.10.18a';   // shown on /health, to check which code is deployed
 const ROOMS = 7;
 const MAX_PLAYERS = 4;
 const MAX_WATCHERS = 8;
@@ -44,6 +44,9 @@ const WEEK_MS = 7 * 24 * 3600 * 1000;
 
 const cleanName = n => (String(n || '').replace(/[^\p{L}\p{N} _.\-]/gu, '').trim().slice(0, 12)) || 'Player';
 const cleanPid = p => String(p || '').replace(/[^a-z0-9]/gi, '').slice(0, 24);
+// Which kind of device a player uses: shown as an icon in the round stats and the ranking.
+const DEVICES = { phone: 1, computer: 2 };            // bit flags in players.devices
+const cleanDev = d => (d === 'phone' || d === 'computer' ? d : '');
 const cleanText = t => String(t || '').slice(0, 200);
 
 const CORS = {
@@ -79,7 +82,7 @@ export class Hub extends DurableObject {
     this.sql.exec(`CREATE INDEX IF NOT EXISTS results_ts ON results (ts)`);
     // All-time stat totals (added later; ALTER fails harmlessly once the column exists).
     try { this.sql.exec(`ALTER TABLE players RENAME COLUMN tetrises TO busts`); } catch (e) { /* new or already renamed */ }
-    for (const col of ['pieces', 'lines', 'busts', 'sent', 'specials', 'play_ms', 'best_ppm']) {
+    for (const col of ['pieces', 'lines', 'busts', 'sent', 'specials', 'play_ms', 'best_ppm', 'devices']) {
       try { this.sql.exec(`ALTER TABLE players ADD COLUMN ${col} INTEGER NOT NULL DEFAULT 0`); } catch (e) { /* exists */ }
     }
     // clients = seated players (max 4, incl. late joiners waiting for the next game);
@@ -113,9 +116,9 @@ export class Hub extends DurableObject {
     }));
     // Player ids never leave the server; 'you' marks the caller's own row.
     const mark = rows => rows.map(({ pid: p, ...r }) => ({ ...r, you: !!pid && p === pid }));
-    const top = mark(this.sql.exec(`SELECT pid, name, wins, games FROM players WHERE games > 0
+    const top = mark(this.sql.exec(`SELECT pid, name, wins, games, devices FROM players WHERE games > 0
       ORDER BY wins DESC, games ASC, updated ASC LIMIT 10`).toArray());
-    const week = mark(this.sql.exec(`SELECT r.pid AS pid, p.name AS name, SUM(r.win) AS wins, COUNT(*) AS games
+    const week = mark(this.sql.exec(`SELECT r.pid AS pid, p.name AS name, SUM(r.win) AS wins, COUNT(*) AS games, p.devices AS devices
       FROM results r JOIN players p ON p.pid = r.pid WHERE r.ts > ?
       GROUP BY r.pid ORDER BY wins DESC, games ASC LIMIT 10`, Date.now() - WEEK_MS).toArray());
     let me = null;
@@ -160,6 +163,7 @@ export class Hub extends DurableObject {
       if (m.t !== 'hello') return;
       if (m.v !== PROTO) { this.send(c, { t: 'reject', reason: 'This version of Rowbusters is out of date. Reload the page.' }); c.ws.close(1000); return; }
       c.name = cleanName(m.name);
+      c.dev = cleanDev(m.dev);
       c.pid = cleanPid(m.pid) || c.id;
       // Same player coming back (e.g. after a dropped connection): replace the old link.
       // Same player back on a new link (old link not noticed as dead yet, or dropped within
@@ -229,7 +233,7 @@ export class Hub extends DurableObject {
       linesPerLevel: Math.max(1, Math.min(20, s.linesPerLevel | 0 || 2)),
       mode: room.mode,                                  // set by the room, not the host
     };
-    const players = room.clients.map(x => ({ name: x.name, owner: x.id, pid: x.pid, team: teams ? x.team : undefined }));
+    const players = room.clients.map(x => ({ name: x.name, owner: x.id, pid: x.pid, dev: x.dev, team: teams ? x.team : undefined }));
     const names = BOT_NAMES.slice().sort(() => Math.random() - 0.5);
     const bots = Math.max(0, Math.min(MAX_PLAYERS - players.length, m.bots | 0));
     const skill = Math.max(0, Math.min(1, +m.skill || 0.5));
@@ -305,7 +309,7 @@ export class Hub extends DurableObject {
       const st = g.stats.get(p.slot);
       const ms = Math.max(1000, (st.died || now) - g.started);
       return {
-        slot: p.slot, name: p.name, bot: !!p.bot, team: p.team || '', win: winTeam ? p.team === winTeam : p.slot === winner, ms,
+        slot: p.slot, name: p.name, bot: !!p.bot, dev: p.bot ? '' : p.dev || '', team: p.team || '', win: winTeam ? p.team === winTeam : p.slot === winner, ms,
         pieces: st.pieces, ppm: Math.round(st.pieces / (ms / 60000)), lines: st.lines, busts: st.busts,
         sent: st.sent, used: st.used, recv: st.recv, by: st.by, out: st.died || now + (p.slot === winner ? 1 : 0),
       };
@@ -365,13 +369,13 @@ export class Hub extends DurableObject {
       const win = (winTeam ? p.team === winTeam : p.slot === winner) ? 1 : 0;
       const r = stats.players.find(x => x.slot === p.slot);
       const ppm = r.ms >= MIN_SPEED_MS ? r.ppm : 0;     // too short a game for a meaningful speed
-      this.sql.exec(`INSERT INTO players (pid, name, wins, games, updated, pieces, lines, busts, sent, specials, play_ms, best_ppm)
-        VALUES (?, ?, ?, 1, ?, ?, ?, ?, ?, ?, ?, ?)
+      this.sql.exec(`INSERT INTO players (pid, name, wins, games, updated, pieces, lines, busts, sent, specials, play_ms, best_ppm, devices)
+        VALUES (?, ?, ?, 1, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(pid) DO UPDATE SET name = excluded.name, wins = wins + excluded.wins, games = games + 1, updated = excluded.updated,
           pieces = pieces + excluded.pieces, lines = lines + excluded.lines, busts = busts + excluded.busts,
           sent = sent + excluded.sent, specials = specials + excluded.specials, play_ms = play_ms + excluded.play_ms,
-          best_ppm = MAX(best_ppm, excluded.best_ppm)`,
-        p.pid, p.name, win, now, r.pieces, r.lines, r.busts, r.sent, r.used, r.ms, ppm);
+          best_ppm = MAX(best_ppm, excluded.best_ppm), devices = devices | excluded.devices`,
+        p.pid, p.name, win, now, r.pieces, r.lines, r.busts, r.sent, r.used, r.ms, ppm, DEVICES[p.dev] || 0);
       this.sql.exec(`INSERT INTO results (pid, ts, win) VALUES (?, ?, ?)`, p.pid, now, win);
     }
     this.sql.exec(`DELETE FROM results WHERE ts < ?`, now - 8 * 24 * 3600 * 1000);
@@ -443,7 +447,7 @@ export class Hub extends DurableObject {
   }
 
   broadcastLobby(room) {
-    const players = room.clients.map(x => ({ id: x.id, name: x.name, host: x.id === room.hostId, team: x.team || undefined }));
+    const players = room.clients.map(x => ({ id: x.id, name: x.name, host: x.id === room.hostId, dev: x.dev || undefined, team: x.team || undefined }));
     this.toRoom(room, { t: 'lobby', code: `Room ${room.n}`, mode: room.mode, players, watchers: room.watchers.map(x => x.name), playing: !!room.game });
   }
 }
