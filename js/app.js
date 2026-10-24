@@ -174,7 +174,7 @@
         <div class="rb-panel rb-sum-panel">
           <div class="rb-sum-body" id="rb-sum-body"></div>
           <div class="rb-row">
-            <button class="rb-btn-secondary" id="rb-sum-copy" type="button">Copy stats</button>
+            <button class="rb-btn-secondary" id="rb-sum-copy" type="button">Copy image</button>
             <button class="rb-btn-primary" id="rb-sum-close" type="button">Close</button>
           </div>
         </div>
@@ -397,45 +397,27 @@
         `</div>` +
         (d.notes.length ? `<ul class="rb-sum-notes">${d.notes.map(n => `<li>${esc(n)}</li>`).join('')}</ul>` : '');
     }
-    // The summary as plain text, to paste into a chat app.
-    function summaryText() {
+    // The summary as a picture (js/statsimage.js draws it), for pasting into a chat app.
+    function summaryImageData() {
       const d = summaryData();
-      const out = [`📊 Rowbusters · ${roomName()} · ${sumDate(d.at)}`, ''];
-      out.push(d.players.length === 2 ? `${d.players[0].name} ${d.players[0].wins} – ${d.players[1].wins} ${d.players[1].name}`
-        : d.players.map(t => `${t.name} ${t.wins}`).join(' · '));
-      const initials = d.players.map(t => t.short).join('–');
-      out.push('', `Games (lines ${initials} · sent ${initials}):`);
-      for (const g of d.games) out.push(`${g.n}. ${g.winner} (${fmtTime(g.ms)}) — lines ${perPlayer(d, g, p => p.lines)} · sent ${perPlayer(d, g, p => p.sent)}`);
-      out.push('', `Totals (${fmtTime(d.ms)} played):`);
-      for (const t of d.players) out.push(`${t.name}${t.bot ? ' (bot)' : ''} — ${t.wins}/${t.games} wins · ${t.lines} lines · ${t.sent} sent · ${t.busts} rowbusts · ${t.ppm} ppm`);
-      if (d.notes.length) out.push('', ...d.notes.map(n => `• ${n}`));
-      out.push('', homeLink());
-      return out.join('\n');
+      return {
+        title: `Rowbusters · ${roomName()}`, date: sumDate(d.at), footer: homeLink(), total: fmtTime(d.ms), notes: d.notes,
+        players: d.players.map(({ name, color, bot, wins, games, lines, sent, busts, ppm, used, short }) => ({ name, color, bot, wins, games, lines, sent, busts, ppm, used, short })),
+        games: d.games.map(g => {
+          const w = g.winKey && d.players.find(t => t.key === g.winKey);
+          return { n: g.n, winner: w ? w.name : g.winner, winColor: w ? w.color : '', time: fmtTime(g.ms), lines: perPlayer(d, g, p => p.lines), sent: perPlayer(d, g, p => p.sent) };
+        }),
+      };
     }
-    // One round as plain text.
-    function statsText(st) {
-      const DEV_EMOJI = { phone: ' 📱', computer: ' 💻' };
-      const who = p => p.name + (p.bot ? ' (bot)' : DEV_EMOJI[p.dev] || '');
-      const out = [`📊 Rowbusters · ${roomName()}`, '', `Game ${rounds.indexOf(st) + 1} (${fmtTime(st.ms)}):`];
-      for (const p of st.players) out.push(`${p.win ? '🏆' : p.place + '.'} ${who(p)} — ${p.ppm} ppm · ${p.lines} lines · ${p.busts} rowbusts · ${p.sent} sent · specials ${p.used}/${p.recv}`);
-      out.push('', homeLink());
-      return out.join('\n');
-    }
-    async function copyText(text) {
-      try { await navigator.clipboard.writeText(text); return true; } catch (e) { /* try the old way */ }
-      const ta = document.createElement('textarea');
-      ta.value = text; ta.setAttribute('readonly', ''); ta.style.cssText = 'position:fixed;top:0;left:0;opacity:0';
-      document.body.appendChild(ta); ta.select(); ta.setSelectionRange(0, text.length);
-      let ok = false;
-      try { ok = document.execCommand('copy'); } catch (e) { /* not allowed */ }
-      ta.remove();
-      return ok;
-    }
-    async function copyButton(b, text, label) {
-      const ok = await copyText(text);
-      b.textContent = ok ? 'Copied ✓' : 'Couldn’t copy';
-      b.classList.toggle('done', ok);
-      setTimeout(() => { b.textContent = label; b.classList.remove('done'); }, 1800);
+    // Must start the clipboard write within the tap (Safari), so nothing is awaited before it.
+    function copyImage(b) {
+      const label = b.textContent;
+      b.textContent = 'Making image…';
+      RB.statsImage.copy(RB.statsImage.render(summaryImageData())).then(res => {
+        b.textContent = { copied: 'Image copied ✓', shared: 'Shared ✓', saved: 'Image saved ✓', failed: 'Couldn’t copy' }[res] || label;
+        b.classList.toggle('done', res === 'copied' || res === 'shared' || res === 'saved');
+        setTimeout(() => { b.textContent = label; b.classList.remove('done'); }, 2200);
+      });
     }
     function openSummary() {
       $('rb-sum-body').innerHTML = summaryHTML();
@@ -464,7 +446,7 @@
         `<table><thead><tr><th></th><th class="nm">Player</th><th>Time</th><th>PPM</th><th>Lines</th><th>4&times;</th><th>Sent</th><th>Spec</th></tr></thead><tbody>${rows}</tbody></table>` +
         (aw.length ? `<ul>${aw.map(x => `<li>${x}</li>`).join('')}</ul>` : '') +
         `<p>PPM pieces per minute &middot; 4&times; rowbusts (4 lines at once) &middot; Sent lines sent &middot; Spec specials used/received</p>` +
-        `<div class="rb-st-btns">${n > 1 ? `<button class="rb-st-sum" type="button">&#128202; Summary &middot; ${n} games</button>` : ''}<button class="rb-st-copy" type="button">Copy stats</button></div>`;
+        `<div class="rb-st-btns">${n > 1 ? `<button class="rb-st-sum" type="button">&#128202; Summary &middot; ${n} games</button>` : ''}<button class="rb-st-copy" type="button">Copy image</button></div>`;
     }
     function roomStats(st) {
       const c = $('rb-chat');
@@ -473,7 +455,6 @@
       st.at = Date.now();
       rounds.push(st);
       div.innerHTML = statsCard(st);
-      div.copyText = statsText(st);
       c.appendChild(div);
       while (c.children.length > 200) c.firstChild.remove();
       c.scrollTop = c.scrollHeight;
@@ -702,10 +683,9 @@
       $('rb-chat').addEventListener('click', e => {
         if (e.target.closest('.rb-st-sum')) { openSummary(); return; }
         const b = e.target.closest('.rb-st-copy');
-        const card = b && b.closest('.rb-stats');
-        if (card && card.copyText) copyButton(b, card.copyText, 'Copy stats');
+        if (b) copyImage(b);
       });
-      $('rb-sum-copy').addEventListener('click', e => copyButton(e.currentTarget, summaryText(), 'Copy stats'));
+      $('rb-sum-copy').addEventListener('click', e => copyImage(e.currentTarget));
       $('rb-sum-close').addEventListener('click', () => show('rb-summary', false));
       $('rb-teams').addEventListener('click', e => {
         const b = e.target.closest('button[data-team]');
