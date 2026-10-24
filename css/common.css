@@ -247,3 +247,7 @@ button { font: inherit; color: inherit; border: 0; background: none; cursor: poi
 .rb-dev { display: inline-flex; vertical-align: -1px; margin-left: 4px; color: var(--dim); }
 .rb-dev svg { width: 11px; height: 11px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; }
 .rb-rank li .rb-dev svg { width: 12px; height: 12px; }
+/* Round stats: the "All N games" summary and the Copy stats button */
+.rb-stats .rb-st-sess { margin-top: 8px; padding-top: 6px; border-top: 1px dashed var(--line-2); }
+.rb-st-copy { display: block; width: 100%; margin-top: 6px; padding: 7px; border-radius: 8px; background: var(--panel-2); border: 1px solid var(--line-2); color: var(--text); font: 700 12px var(--font); touch-action: manipulation; }
+.rb-st-copy.done { background: var(--accent); color: var(--ink); border-color: var(--accent); }

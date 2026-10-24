@@ -304,10 +304,54 @@
     }
 
     // Round stats card (public rooms): the server sends it right after a game ends.
+    // Every round's stats since joining this room, for the "All N games" summary.
+    let rounds = [];
+    const fmtTime = ms => { const sec = Math.round(ms / 1000); return `${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, '0')}`; };
+    // Totals per real player over all rounds, matched by nickname. Bots are left out: they get
+    // new random names every game.
+    function sessionTotals() {
+      const by = new Map();
+      for (const st of rounds) for (const p of st.players) {
+        if (p.bot) continue;
+        const k = p.name;
+        const t = by.get(k) || { name: p.name, bot: p.bot, devs: [], games: 0, wins: 0, ms: 0, pieces: 0, lines: 0, busts: 0, sent: 0, used: 0, recv: 0 };
+        t.games++; t.wins += p.win ? 1 : 0; t.ms += p.ms; t.pieces += p.pieces; t.lines += p.lines;
+        t.busts += p.busts; t.sent += p.sent; t.used += p.used; t.recv += p.recv;
+        if (p.dev && !t.devs.includes(p.dev)) t.devs.push(p.dev);
+        by.set(k, t);
+      }
+      return [...by.values()].map(t => Object.assign(t, { ppm: Math.round(t.pieces / Math.max(1, t.ms / 60000)) }))
+        .sort((a, b) => b.wins - a.wins || b.lines - a.lines || b.ppm - a.ppm);
+    }
+    // The same stats as plain text, to paste into a chat app.
+    function statsText(st) {
+      const DEV_EMOJI = { phone: ' 📱', computer: ' 💻' };
+      const who = p => p.name + (p.bot ? ' (bot)' : (p.devs || [p.dev]).map(d => DEV_EMOJI[d] || '').join(''));
+      const where = session && session.public ? ` · ${$('rb-code-show').textContent}` : '';
+      const out = [`📊 Rowbusters${where}`, '', `Last game (${fmtTime(st.ms)}):`];
+      for (const p of st.players) out.push(`${p.win ? '🏆' : p.place + '.'} ${who(p)} — ${p.ppm} ppm · ${p.lines} lines · ${p.busts} rowbusts · ${p.sent} sent · specials ${p.used}/${p.recv}`);
+      if (rounds.length > 1) {
+        out.push('', `All ${rounds.length} games:`);
+        sessionTotals().forEach((t, i) => out.push(`${i + 1}. ${who(t)} — ${t.wins}/${t.games} wins · ${t.ppm} ppm · ${t.lines} lines · ${t.busts} rowbusts · ${t.sent} sent · specials ${t.used}/${t.recv}`));
+      }
+      out.push('', location.hostname.endsWith('rowbusters.com') ? 'rowbusters.com' : location.origin + location.pathname);
+      return out.join('\n');
+    }
+    async function copyText(text) {
+      try { await navigator.clipboard.writeText(text); return true; } catch (e) { /* try the old way */ }
+      const ta = document.createElement('textarea');
+      ta.value = text; ta.setAttribute('readonly', ''); ta.style.cssText = 'position:fixed;top:0;left:0;opacity:0';
+      document.body.appendChild(ta); ta.select(); ta.setSelectionRange(0, text.length);
+      let ok = false;
+      try { ok = document.execCommand('copy'); } catch (e) { /* not allowed */ }
+      ta.remove();
+      return ok;
+    }
+
     function statsCard(st) {
       const own = room.players.find(p => p.isLocal), mine = own ? own.slot : 0;
       const name = sl => { const p = st.players.find(x => x.slot === sl); return p ? esc(p.name) : '?'; };
-      const time = ms => { const sec = Math.round(ms / 1000); return `${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, '0')}`; };
+      const time = fmtTime;
       const place = p => p.win ? '&#127942;' : p.place;
       const rows = st.players.map(p => `<tr class="${p.slot === mine ? 'you' : ''}"><td>${place(p)}</td><td class="nm">${p.team ? `<span class="rb-tm rb-tm-${p.team}">${p.team}</span> ` : ''}${esc(p.name)}${p.bot ? ' <i>bot</i>' : devIcon(p.dev)}</td>` +
         `<td>${time(p.ms)}</td><td>${p.ppm}</td><td>${p.lines}</td><td>${p.busts}</td><td>${p.sent}</td><td>${p.used}/${p.recv}</td></tr>`).join('');
@@ -320,16 +364,28 @@
         const top = Object.entries(me.by).sort((a, b) => b[1] - a[1])[0];
         if (top && top[1] > 0) aw.push(`&#127919; Hit you most: <b>${name(top[0] | 0)}</b> &times;${top[1]}`);
       }
+      // From the second game on: totals for every game played since joining the room.
+      let summary = '';
+      if (rounds.length > 1) {
+        const myName = own ? own.name : '';
+        const tot = sessionTotals().map((t, i) => `<tr class="${!t.bot && t.name === myName ? 'you' : ''}"><td>${i + 1}</td><td class="nm">${esc(t.name)}${t.bot ? ' <i>bot</i>' : t.devs.map(devIcon).join('')}</td>` +
+          `<td>${t.wins}/${t.games}</td><td>${t.ppm}</td><td>${t.lines}</td><td>${t.busts}</td><td>${t.sent}</td><td>${t.used}/${t.recv}</td></tr>`).join('');
+        summary = `<div class="rb-st-head rb-st-sess">All ${rounds.length} games <span>${time(rounds.reduce((n, r) => n + r.ms, 0))}</span></div>` +
+          `<table><thead><tr><th></th><th class="nm">Player</th><th>Wins</th><th>PPM</th><th>Lines</th><th>4&times;</th><th>Sent</th><th>Spec</th></tr></thead><tbody>${tot}</tbody></table>`;
+      }
       return `<div class="rb-st-head">&#128202; Round stats <span>${time(st.ms)}</span></div>` +
         `<table><thead><tr><th></th><th class="nm">Player</th><th>Time</th><th>PPM</th><th>Lines</th><th>4&times;</th><th>Sent</th><th>Spec</th></tr></thead><tbody>${rows}</tbody></table>` +
-        (aw.length ? `<ul>${aw.map(x => `<li>${x}</li>`).join('')}</ul>` : '') +
-        `<p>PPM pieces per minute &middot; 4&times; rowbusts (4 lines at once) &middot; Sent lines sent &middot; Spec specials used/received</p>`;
+        (aw.length ? `<ul>${aw.map(x => `<li>${x}</li>`).join('')}</ul>` : '') + summary +
+        `<p>PPM pieces per minute &middot; 4&times; rowbusts (4 lines at once) &middot; Sent lines sent &middot; Spec specials used/received${summary ? ' &middot; Wins games won/played' : ''}</p>` +
+        `<button class="rb-st-copy" type="button">Copy stats</button>`;
     }
     function roomStats(st) {
       const c = $('rb-chat');
       const div = document.createElement('div');
       div.className = 'rb-stats';
+      rounds.push(st);
       div.innerHTML = statsCard(st);
+      div.copyText = statsText(st);
       c.appendChild(div);
       while (c.children.length > 200) c.firstChild.remove();
       c.scrollTop = c.scrollHeight;
@@ -337,6 +393,7 @@
 
     function newSession(kind = 'p2p') {
       $('rb-chat').innerHTML = '';
+      rounds = [];
       if (session) session.close();
       const s = session = kind === 'server' ? new RB.net.ServerSession() : new RB.net.Session();
       $('rb-code-label').textContent = s.public ? 'Public room' : 'Room code';
@@ -553,6 +610,16 @@
       $('rb-code').addEventListener('input', e => { e.target.value = RB.net.cleanCode(e.target.value); });
       $('rb-code').addEventListener('keydown', e => { if (e.key === 'Enter') $('rb-join').click(); });
       $('rb-on-start').addEventListener('click', hostStart);
+      // "Copy stats" on a stats card: the stats as plain text, for pasting into a chat app.
+      $('rb-chat').addEventListener('click', async e => {
+        const b = e.target.closest('.rb-st-copy');
+        const card = b && b.closest('.rb-stats');
+        if (!card || !card.copyText) return;
+        const ok = await copyText(card.copyText);
+        b.textContent = ok ? 'Copied ✓' : 'Couldn’t copy';
+        b.classList.toggle('done', ok);
+        setTimeout(() => { b.textContent = 'Copy stats'; b.classList.remove('done'); }, 1800);
+      });
       $('rb-teams').addEventListener('click', e => {
         const b = e.target.closest('button[data-team]');
         if (b && !b.disabled && !b.classList.contains('on') && session && session.setTeam) session.setTeam(b.dataset.team);
