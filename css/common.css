@@ -247,7 +247,49 @@ button { font: inherit; color: inherit; border: 0; background: none; cursor: poi
 .rb-dev { display: inline-flex; vertical-align: -1px; margin-left: 4px; color: var(--dim); }
 .rb-dev svg { width: 11px; height: 11px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; }
 .rb-rank li .rb-dev svg { width: 12px; height: 12px; }
-/* Round stats: the "All N games" summary and the Copy stats button */
-.rb-stats .rb-st-sess { margin-top: 8px; padding-top: 6px; border-top: 1px dashed var(--line-2); }
-.rb-st-copy { display: block; width: 100%; margin-top: 6px; padding: 7px; border-radius: 8px; background: var(--panel-2); border: 1px solid var(--line-2); color: var(--text); font: 700 12px var(--font); touch-action: manipulation; }
+/* Round stats card buttons: game summary and Copy stats */
+.rb-st-btns { display: flex; gap: 6px; margin-top: 6px; }
+.rb-st-sum { flex: 1.3; padding: 7px; border-radius: 8px; background: #2B3511; border: 1px solid var(--accent); color: var(--accent); font: 700 12px var(--font); touch-action: manipulation; }
+.rb-st-copy { flex: 1; display: block; padding: 7px; border-radius: 8px; background: var(--panel-2); border: 1px solid var(--line-2); color: var(--text); font: 700 12px var(--font); touch-action: manipulation; }
 .rb-st-copy.done { background: var(--accent); color: var(--ink); border-color: var(--accent); }
+
+/* Game summary sheet (all games played in the room) */
+#rb-summary { z-index: 70; }
+.rb-sum-panel { max-width: 440px; max-height: 100%; padding: 14px 12px 12px; gap: 12px; }
+.rb-sum-body { flex: 1; min-height: 0; overflow-y: auto; -webkit-overflow-scrolling: touch; display: flex; flex-direction: column; gap: 12px; }
+.rb-sum-top { text-align: center; display: flex; flex-direction: column; gap: 3px; }
+.rb-sum-top b { font: 700 14px var(--font); letter-spacing: .12em; text-transform: uppercase; color: var(--dim); }
+.rb-sum-top span { font-size: 13px; color: var(--dim); }
+.rb-sum-box { background: var(--panel-2); border: 1px solid var(--line); border-radius: 14px; padding: 10px 12px; }
+.rb-sum-score { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: center; padding: 14px 8px; }
+.rb-sum-score.many { grid-template-columns: repeat(auto-fit, minmax(76px, 1fr)); gap: 8px; }
+.rb-sum-cell { display: flex; flex-direction: column; align-items: center; min-width: 0; }
+.rb-sum-cell b { font: 700 20px var(--font); max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rb-sum-cell strong { font: 400 58px/1.05 var(--display); color: var(--text); }
+.rb-sum-score.many .rb-sum-cell b { font-size: 15px; }
+.rb-sum-score.many .rb-sum-cell strong { font-size: 40px; }
+.rb-sum-cell i { font-style: normal; font-size: 10px; color: var(--dim); }
+.rb-sum-dash { font: 400 40px var(--display); color: var(--dim); padding: 0 6px; }
+.rb-sum-box table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+.rb-sum-games th { font-size: 11px; font-weight: 700; color: var(--dim); padding: 4px 3px 8px; text-align: center; white-space: nowrap; }
+.rb-sum-games td { font-size: 15px; padding: 9px 3px; text-align: center; border-top: 1px solid var(--line); white-space: nowrap; }
+.rb-sum-games th:first-child, .rb-sum-games td:first-child { text-align: left; }
+.rb-sum-games td.w { font-weight: 700; max-width: 110px; overflow: hidden; text-overflow: ellipsis; }
+.rb-sum-h { font-size: 12px; font-weight: 700; color: var(--dim); text-transform: uppercase; letter-spacing: .08em; margin: 2px 0 8px; }
+.rb-sum-tot th { font-size: 14px; font-weight: 700; padding: 0 4px 6px; text-align: center; white-space: nowrap; max-width: 90px; overflow: hidden; text-overflow: ellipsis; }
+.rb-sum-tot td { font-size: 15px; font-weight: 700; padding: 4px; text-align: center; }
+.rb-sum-tot td.l { font-weight: 500; text-align: left; white-space: nowrap; color: var(--soft); }
+.rb-sum-notes { list-style: none; display: flex; flex-direction: column; gap: 8px; padding: 0 4px; }
+.rb-sum-notes li { position: relative; padding-left: 18px; font-size: 14px; line-height: 1.35; }
+.rb-sum-notes li::before { content: ""; position: absolute; left: 2px; top: .5em; width: 8px; height: 8px; border-radius: 50%; background: #FFD84D; }
+.rb-sum-tot th i { font-style: normal; font-size: 10px; font-weight: 500; color: var(--dim); }
+.rb-sum-score.many { align-items: start; }
+.rb-sum-rows th { font-size: 10px; font-weight: 700; color: var(--dim); text-transform: uppercase; padding: 0 2px 6px; text-align: center; }
+.rb-sum-rows td { font-size: 14px; font-weight: 700; padding: 6px 2px; text-align: center; border-top: 1px solid var(--line); white-space: nowrap; }
+.rb-sum-rows .nm { text-align: left; width: 100%; max-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.rb-sum-rows td.nm i { font-style: normal; font-size: 10px; font-weight: 500; color: var(--dim); }
+.rb-sum-rows tr.you td { background: #2B3511; }
+.rb-sum-legend { font-size: 10px; color: var(--dim); margin-top: 6px; }
+.rb-sum-games.many th { font-size: 10px; padding: 4px 2px 8px; }
+.rb-sum-games.many td { font-size: 13px; padding: 8px 2px; }
+.rb-sum-games.many td.w { max-width: 84px; }

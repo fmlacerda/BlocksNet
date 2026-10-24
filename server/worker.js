@@ -24,7 +24,7 @@
  */
 import { DurableObject } from 'cloudflare:workers';
 
-const SERVER_VERSION = '2026.10.24a';   // shown on /health, to check which code is deployed
+const SERVER_VERSION = '2026.10.24b';   // shown on /health, to check which code is deployed
 const ROOMS = 7;
 const MAX_PLAYERS = 4;
 const MAX_WATCHERS = 8;
@@ -234,7 +234,10 @@ export class Hub extends DurableObject {
       mode: room.mode,                                  // set by the room, not the host
     };
     const players = room.clients.map(x => ({ name: x.name, owner: x.id, pid: x.pid, dev: x.dev, team: teams ? x.team : undefined }));
-    const names = BOT_NAMES.slice().sort(() => Math.random() - 0.5);
+    // Bots keep the same names game after game in a room (so the room's game summary can count
+    // them); a new set is drawn once the room has emptied.
+    if (!room.botNames) room.botNames = BOT_NAMES.slice().sort(() => Math.random() - 0.5);
+    const names = room.botNames;
     const bots = Math.max(0, Math.min(MAX_PLAYERS - players.length, m.bots | 0));
     const skill = Math.max(0, Math.min(1, +m.skill || 0.5));
     for (let i = 0; i < bots; i++) {
@@ -413,6 +416,7 @@ export class Hub extends DurableObject {
     }
     if (!replaced && !held) this.system(room, `${c.name} left the room`);
     if (!room.clients.length && room.game && !room.game.away.size) room.game = null;
+    if (!room.clients.length && !room.watchers.length && !room.game) room.botNames = null;
     this.checkEnd(room);
     this.seatWatchers(room);
     this.broadcastLobby(room);

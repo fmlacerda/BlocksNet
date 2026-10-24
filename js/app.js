@@ -170,6 +170,15 @@
           </div>
         </div>
       </div>
+      <div class="rb-overlay hidden" id="rb-summary">
+        <div class="rb-panel rb-sum-panel">
+          <div class="rb-sum-body" id="rb-sum-body"></div>
+          <div class="rb-row">
+            <button class="rb-btn-secondary" id="rb-sum-copy" type="button">Copy stats</button>
+            <button class="rb-btn-primary" id="rb-sum-close" type="button">Close</button>
+          </div>
+        </div>
+      </div>
       <div class="rb-overlay hidden" id="rb-diag-sheet">
         <div class="rb-panel rb-panel-room">
           <div class="rb-sub">Connection details</div>
@@ -304,37 +313,112 @@
     }
 
     // Round stats card (public rooms): the server sends it right after a game ends.
-    // Every round's stats since joining this room, for the "All N games" summary.
+    // Every round's stats since joining this room, for the game summary.
     let rounds = [];
     const fmtTime = ms => { const sec = Math.round(ms / 1000); return `${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, '0')}`; };
-    // Totals per real player over all rounds, matched by nickname. Bots are left out: they get
-    // new random names every game.
-    function sessionTotals() {
+    const SUM_COLORS = ['#4DA3FF', '#FF9A3D', '#C6FF3D', '#FF5FA8', '#3DFFE0', '#B28CFF'];
+    const roomName = () => (session && session.public ? $('rb-code-show').textContent : 'Private room');
+    const homeLink = () => (location.hostname.endsWith('rowbusters.com') ? 'rowbusters.com' : location.origin + location.pathname);
+
+    // Everything the summary shows, worked out from the rounds: one entry per player (matched by
+    // nickname; bots keep their names in a room) and one per game.
+    function summaryData() {
       const by = new Map();
-      for (const st of rounds) for (const p of st.players) {
-        if (p.bot) continue;
-        const k = p.name;
-        const t = by.get(k) || { name: p.name, bot: p.bot, devs: [], games: 0, wins: 0, ms: 0, pieces: 0, lines: 0, busts: 0, sent: 0, used: 0, recv: 0 };
-        t.games++; t.wins += p.win ? 1 : 0; t.ms += p.ms; t.pieces += p.pieces; t.lines += p.lines;
-        t.busts += p.busts; t.sent += p.sent; t.used += p.used; t.recv += p.recv;
-        if (p.dev && !t.devs.includes(p.dev)) t.devs.push(p.dev);
-        by.set(k, t);
-      }
-      return [...by.values()].map(t => Object.assign(t, { ppm: Math.round(t.pieces / Math.max(1, t.ms / 60000)) }))
+      const keyOf = p => (p.bot ? 'bot:' : '') + p.name;
+      const games = rounds.map((st, i) => {
+        const cells = new Map();
+        for (const p of st.players) {
+          const k = keyOf(p);
+          const t = by.get(k) || { key: k, name: p.name, bot: p.bot, devs: [], games: 0, wins: 0, ms: 0, pieces: 0, lines: 0, busts: 0, sent: 0, used: 0, recv: 0 };
+          t.games++; t.wins += p.win ? 1 : 0; t.ms += p.ms; t.pieces += p.pieces; t.lines += p.lines;
+          t.busts += p.busts; t.sent += p.sent; t.used += p.used; t.recv += p.recv;
+          if (p.dev && !t.devs.includes(p.dev)) t.devs.push(p.dev);
+          by.set(k, t);
+          cells.set(k, p);
+        }
+        const winners = st.players.filter(p => p.win);
+        const teamWin = winners.length > 1 && winners[0].team;
+        return { n: i + 1, ms: st.ms, cells, winKey: !teamWin && winners[0] ? keyOf(winners[0]) : '',
+          winner: teamWin ? `Team ${winners[0].team}` : winners[0] ? winners[0].name : 'nobody' };
+      });
+      const players = [...by.values()].map(t => Object.assign(t, { ppm: Math.round(t.pieces / Math.max(1, t.ms / 60000)) }))
         .sort((a, b) => b.wins - a.wins || b.lines - a.lines || b.ppm - a.ppm);
+      players.forEach((t, i) => { t.color = SUM_COLORS[i % SUM_COLORS.length]; });
+      // Short column labels: initials, or two letters where initials clash.
+      players.forEach(t => { t.short = t.name.slice(0, 1).toUpperCase(); });
+      players.forEach(t => { if (players.some(o => o !== t && o.short === t.short)) t.short = t.name.slice(0, 2); });
+      const P = k => players.find(t => t.key === k);
+      // A few highlights.
+      const notes = [];
+      let run = 0, best = { k: '', n: 0, end: 0 };
+      games.forEach((g, i) => { run = g.winKey && i && games[i - 1].winKey === g.winKey ? run + 1 : 1; if (g.winKey && run > best.n) best = { k: g.winKey, n: run, end: g.n }; });
+      if (best.n >= 2) notes.push(`${P(best.k).name} won ${best.n === games.length ? `all ${best.n}` : `${best.n} in a row`}${best.n < games.length ? ` (games ${best.end - best.n + 1}–${best.end})` : ''}.`);
+      if (games.length >= 2) {
+        const q = games.reduce((a, g) => (g.ms < a.ms ? g : a)), l = games.reduce((a, g) => (g.ms > a.ms ? g : a));
+        notes.push(`Quickest game: #${q.n}, just ${fmtTime(q.ms)} — won by ${q.winner}.`);
+        if (l !== q) notes.push(`Longest game: #${l.n} (${fmtTime(l.ms)}) — won by ${l.winner}.`);
+      }
+      const top = (f, min = 1) => { const m = Math.max(...players.map(f)); const at = players.filter(t => f(t) === m); return m >= min && at.length === 1 ? at[0] : null; };
+      const b = top(t => t.busts);
+      if (b) notes.push(`${b.name} made the most rowbusts (${b.busts}).`);
+      const sn = top(t => t.sent);
+      if (sn) notes.push(`${sn.name} sent the most lines (${sn.sent}).`);
+      return { players, games, notes: notes.slice(0, 4), ms: rounds.reduce((n, r) => n + r.ms, 0), at: rounds[0] ? rounds[0].at : Date.now() };
     }
-    // The same stats as plain text, to paste into a chat app.
+    const sumDate = at => new Date(at).toLocaleDateString(undefined, { weekday: 'long', month: 'short', day: 'numeric', year: 'numeric' });
+    // "12–5" style cell: one number per player, in the summary's player order ('·' = not in that game).
+    const perPlayer = (d, g, f) => d.players.map(t => (g.cells.has(t.key) ? f(g.cells.get(t.key)) : '·')).join('–');
+
+    function summaryHTML() {
+      const d = summaryData();
+      const own = room.players.find(p => p.isLocal);
+      const nm = t => `<span style="color:${t.color}">${esc(t.name)}</span>`;
+      const score = d.players.map(t => `<div class="rb-sum-cell"><b style="color:${t.color}">${esc(t.name)}</b><strong>${t.wins}</strong>${t.bot ? '<i>bot</i>' : ''}</div>`)
+        .join(d.players.length === 2 ? '<div class="rb-sum-dash">–</div>' : '');
+      const initials = d.players.map(t => esc(t.short)).join('–');
+      const gameRows = d.games.map(g => {
+        const w = g.winKey ? d.players.find(t => t.key === g.winKey) : null;
+        return `<tr><td>${g.n}</td><td class="w">${w ? nm(w) : esc(g.winner)}</td><td>${fmtTime(g.ms)}</td><td>${perPlayer(d, g, p => p.lines)}</td><td>${perPlayer(d, g, p => p.sent)}</td></tr>`;
+      }).join('');
+      const totRow = (label, f) => `<tr><td class="l">${label}</td>${d.players.map(t => `<td>${f(t)}</td>`).join('')}</tr>`;
+      return `<div class="rb-sum-top"><b>Rowbusters · ${esc(roomName())}</b><span>${sumDate(d.at)}</span></div>` +
+        `<div class="rb-sum-box rb-sum-score${d.players.length > 2 ? ' many' : ''}"${d.players.length > 2 ? ` style="grid-template-columns:repeat(${Math.min(d.players.length, 4)},minmax(0,1fr))"` : ''}>${score}</div>` +
+        `<div class="rb-sum-box"><table class="rb-sum-games${d.players.length > 2 ? ' many' : ''}"><thead><tr><th>#</th><th>Winner</th><th>Time</th><th>Lines ${initials}</th><th>Sent ${initials}</th></tr></thead><tbody>${gameRows}</tbody></table></div>` +
+        `<div class="rb-sum-box"><div class="rb-sum-h">Totals · ${fmtTime(d.ms)} played</div>` +
+        (d.players.length <= 2
+          // Two players: one column each, like a head-to-head.
+          ? `<table class="rb-sum-tot"><thead><tr><th></th>${d.players.map(t => `<th>${nm(t)}${t.bot ? ' <i>bot</i>' : ''}</th>`).join('')}</tr></thead><tbody>` +
+            totRow('Games won', t => `${t.wins}/${t.games}`) + totRow('Lines cleared', t => t.lines) + totRow('Lines sent', t => t.sent) +
+            totRow('Rowbusts (4&times;)', t => t.busts) + totRow('Avg speed (PPM)', t => t.ppm) + totRow('Specials used', t => t.used) + `</tbody></table>`
+          // More players: one row each, so it fits a phone.
+          : `<table class="rb-sum-rows"><thead><tr><th class="nm">Player</th><th>Won</th><th>Lines</th><th>Sent</th><th>4&times;</th><th>PPM</th><th>Spec</th></tr></thead><tbody>` +
+            d.players.map(t => `<tr class="${own && !t.bot && t.name === own.name ? 'you' : ''}"><td class="nm">${nm(t)}${t.bot ? ' <i>bot</i>' : ''}</td><td>${t.wins}/${t.games}</td><td>${t.lines}</td><td>${t.sent}</td><td>${t.busts}</td><td>${t.ppm}</td><td>${t.used}</td></tr>`).join('') +
+            `</tbody></table><p class="rb-sum-legend">4&times; rowbusts &middot; PPM average pieces per minute &middot; Spec specials used</p>`) +
+        `</div>` +
+        (d.notes.length ? `<ul class="rb-sum-notes">${d.notes.map(n => `<li>${esc(n)}</li>`).join('')}</ul>` : '');
+    }
+    // The summary as plain text, to paste into a chat app.
+    function summaryText() {
+      const d = summaryData();
+      const out = [`📊 Rowbusters · ${roomName()} · ${sumDate(d.at)}`, ''];
+      out.push(d.players.length === 2 ? `${d.players[0].name} ${d.players[0].wins} – ${d.players[1].wins} ${d.players[1].name}`
+        : d.players.map(t => `${t.name} ${t.wins}`).join(' · '));
+      const initials = d.players.map(t => t.short).join('–');
+      out.push('', `Games (lines ${initials} · sent ${initials}):`);
+      for (const g of d.games) out.push(`${g.n}. ${g.winner} (${fmtTime(g.ms)}) — lines ${perPlayer(d, g, p => p.lines)} · sent ${perPlayer(d, g, p => p.sent)}`);
+      out.push('', `Totals (${fmtTime(d.ms)} played):`);
+      for (const t of d.players) out.push(`${t.name}${t.bot ? ' (bot)' : ''} — ${t.wins}/${t.games} wins · ${t.lines} lines · ${t.sent} sent · ${t.busts} rowbusts · ${t.ppm} ppm`);
+      if (d.notes.length) out.push('', ...d.notes.map(n => `• ${n}`));
+      out.push('', homeLink());
+      return out.join('\n');
+    }
+    // One round as plain text.
     function statsText(st) {
       const DEV_EMOJI = { phone: ' 📱', computer: ' 💻' };
-      const who = p => p.name + (p.bot ? ' (bot)' : (p.devs || [p.dev]).map(d => DEV_EMOJI[d] || '').join(''));
-      const where = session && session.public ? ` · ${$('rb-code-show').textContent}` : '';
-      const out = [`📊 Rowbusters${where}`, '', `Last game (${fmtTime(st.ms)}):`];
+      const who = p => p.name + (p.bot ? ' (bot)' : DEV_EMOJI[p.dev] || '');
+      const out = [`📊 Rowbusters · ${roomName()}`, '', `Game ${rounds.indexOf(st) + 1} (${fmtTime(st.ms)}):`];
       for (const p of st.players) out.push(`${p.win ? '🏆' : p.place + '.'} ${who(p)} — ${p.ppm} ppm · ${p.lines} lines · ${p.busts} rowbusts · ${p.sent} sent · specials ${p.used}/${p.recv}`);
-      if (rounds.length > 1) {
-        out.push('', `All ${rounds.length} games:`);
-        sessionTotals().forEach((t, i) => out.push(`${i + 1}. ${who(t)} — ${t.wins}/${t.games} wins · ${t.ppm} ppm · ${t.lines} lines · ${t.busts} rowbusts · ${t.sent} sent · specials ${t.used}/${t.recv}`));
-      }
-      out.push('', location.hostname.endsWith('rowbusters.com') ? 'rowbusters.com' : location.origin + location.pathname);
+      out.push('', homeLink());
       return out.join('\n');
     }
     async function copyText(text) {
@@ -346,6 +430,17 @@
       try { ok = document.execCommand('copy'); } catch (e) { /* not allowed */ }
       ta.remove();
       return ok;
+    }
+    async function copyButton(b, text, label) {
+      const ok = await copyText(text);
+      b.textContent = ok ? 'Copied ✓' : 'Couldn’t copy';
+      b.classList.toggle('done', ok);
+      setTimeout(() => { b.textContent = label; b.classList.remove('done'); }, 1800);
+    }
+    function openSummary() {
+      $('rb-sum-body').innerHTML = summaryHTML();
+      show('rb-summary', true);
+      $('rb-sum-body').scrollTop = 0;
     }
 
     function statsCard(st) {
@@ -364,25 +459,18 @@
         const top = Object.entries(me.by).sort((a, b) => b[1] - a[1])[0];
         if (top && top[1] > 0) aw.push(`&#127919; Hit you most: <b>${name(top[0] | 0)}</b> &times;${top[1]}`);
       }
-      // From the second game on: totals for every game played since joining the room.
-      let summary = '';
-      if (rounds.length > 1) {
-        const myName = own ? own.name : '';
-        const tot = sessionTotals().map((t, i) => `<tr class="${!t.bot && t.name === myName ? 'you' : ''}"><td>${i + 1}</td><td class="nm">${esc(t.name)}${t.bot ? ' <i>bot</i>' : t.devs.map(devIcon).join('')}</td>` +
-          `<td>${t.wins}/${t.games}</td><td>${t.ppm}</td><td>${t.lines}</td><td>${t.busts}</td><td>${t.sent}</td><td>${t.used}/${t.recv}</td></tr>`).join('');
-        summary = `<div class="rb-st-head rb-st-sess">All ${rounds.length} games <span>${time(rounds.reduce((n, r) => n + r.ms, 0))}</span></div>` +
-          `<table><thead><tr><th></th><th class="nm">Player</th><th>Wins</th><th>PPM</th><th>Lines</th><th>4&times;</th><th>Sent</th><th>Spec</th></tr></thead><tbody>${tot}</tbody></table>`;
-      }
-      return `<div class="rb-st-head">&#128202; Round stats <span>${time(st.ms)}</span></div>` +
+      const n = rounds.indexOf(st) + 1;
+      return `<div class="rb-st-head">&#128202; Game ${n} stats <span>${time(st.ms)}</span></div>` +
         `<table><thead><tr><th></th><th class="nm">Player</th><th>Time</th><th>PPM</th><th>Lines</th><th>4&times;</th><th>Sent</th><th>Spec</th></tr></thead><tbody>${rows}</tbody></table>` +
-        (aw.length ? `<ul>${aw.map(x => `<li>${x}</li>`).join('')}</ul>` : '') + summary +
-        `<p>PPM pieces per minute &middot; 4&times; rowbusts (4 lines at once) &middot; Sent lines sent &middot; Spec specials used/received${summary ? ' &middot; Wins games won/played' : ''}</p>` +
-        `<button class="rb-st-copy" type="button">Copy stats</button>`;
+        (aw.length ? `<ul>${aw.map(x => `<li>${x}</li>`).join('')}</ul>` : '') +
+        `<p>PPM pieces per minute &middot; 4&times; rowbusts (4 lines at once) &middot; Sent lines sent &middot; Spec specials used/received</p>` +
+        `<div class="rb-st-btns">${n > 1 ? `<button class="rb-st-sum" type="button">&#128202; Summary &middot; ${n} games</button>` : ''}<button class="rb-st-copy" type="button">Copy stats</button></div>`;
     }
     function roomStats(st) {
       const c = $('rb-chat');
       const div = document.createElement('div');
       div.className = 'rb-stats';
+      st.at = Date.now();
       rounds.push(st);
       div.innerHTML = statsCard(st);
       div.copyText = statsText(st);
@@ -611,15 +699,14 @@
       $('rb-code').addEventListener('keydown', e => { if (e.key === 'Enter') $('rb-join').click(); });
       $('rb-on-start').addEventListener('click', hostStart);
       // "Copy stats" on a stats card: the stats as plain text, for pasting into a chat app.
-      $('rb-chat').addEventListener('click', async e => {
+      $('rb-chat').addEventListener('click', e => {
+        if (e.target.closest('.rb-st-sum')) { openSummary(); return; }
         const b = e.target.closest('.rb-st-copy');
         const card = b && b.closest('.rb-stats');
-        if (!card || !card.copyText) return;
-        const ok = await copyText(card.copyText);
-        b.textContent = ok ? 'Copied ✓' : 'Couldn’t copy';
-        b.classList.toggle('done', ok);
-        setTimeout(() => { b.textContent = 'Copy stats'; b.classList.remove('done'); }, 1800);
+        if (card && card.copyText) copyButton(b, card.copyText, 'Copy stats');
       });
+      $('rb-sum-copy').addEventListener('click', e => copyButton(e.currentTarget, summaryText(), 'Copy stats'));
+      $('rb-sum-close').addEventListener('click', () => show('rb-summary', false));
       $('rb-teams').addEventListener('click', e => {
         const b = e.target.closest('button[data-team]');
         if (b && !b.disabled && !b.classList.contains('on') && session && session.setTeam) session.setTeam(b.dataset.team);
