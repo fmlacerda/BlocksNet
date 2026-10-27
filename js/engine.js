@@ -14,6 +14,8 @@
 (function (global) {
   'use strict';
 
+  // Texts come from js/i18n.js when it is loaded (pages); the keys themselves otherwise (tests).
+  const t = (key, p) => (global.RB && global.RB.t ? global.RB.t(key, p) : key);
   const W = 12;
   const H = 22;
   const MAX_INV = 18;
@@ -519,8 +521,8 @@
       this.elapsed = 0;
       this.winner = null;
       this.lastSync = {};
-      this.log('*** The game has started ***', 'system');
-      if (this.mode.desc && !this.mode.teams) this.log(`*** ${this.mode.label}: ${this.mode.desc.toLowerCase()} ***`, 'system');
+      this.log(t('log.started'), 'system');
+      if (this.mode.desc && !this.mode.teams) this.log(t('log.mode', { label: t('mode.' + this.settings.mode), desc: t('mode.' + this.settings.mode + '.desc') }), 'system');
       this.emit('start');
     }
 
@@ -586,7 +588,7 @@
     applyLines(from, n) {
       const targets = this.opponentsOf(from);
       targets.forEach(o => { if (!o.remote) o.addLines(n); o.hit('a'); });
-      this.log(`${n} line${n > 1 ? 's' : ''} added to all by ${from.name}`, 'lines');
+      this.log(t('log.lines', { n, name: from.name }), 'lines');
       this.emit('lines', { from, count: n, targets });
     }
 
@@ -625,7 +627,7 @@
       target.hit(s);
       const info = SPECIAL_INFO[s];
       const kind = target === from ? 'self' : (info.hostile ? 'attack' : 'special');
-      this.log(`${info.name} on ${target === from ? 'self' : target.name} by ${from.name}`, kind);
+      this.log(t('log.special', { special: t('special.' + s), target: target === from ? t('log.self') : target.name, name: from.name }), kind);
       this.emit('special', { from, target, special: s });
     }
 
@@ -635,7 +637,7 @@
     }
 
     onDeath(p) {
-      this.log(`${p.name} has been eliminated`, 'death');
+      this.log(t('log.out', { name: p.name }), 'death');
       this.emit('death', p);
       if (!p.remote) this.send({ t: 'dead', slot: p.slot, pcs: p.pieces, lines: p.lines, bust: p.busts });
       const alive = this.players.filter(o => o.alive);
@@ -651,13 +653,13 @@
       this.running = false;
       this.winner = winner;
       if (this.authority) this.send({ t: 'end', winner: winner ? winner.slot : 0 });
-      this.log(winner ? `*** ${winner.team ? 'Team ' + winner.team : winner.name} wins! ***` : '*** Game over ***', 'system');
+      this.log(winner ? t('log.wins', { name: winner.team ? t('team.name', { team: winner.team }) : winner.name }) : t('log.over'), 'system');
       this.emit('end', winner);
     }
   }
 
   global.RB = Object.assign(global.RB || {}, {
-    VERSION: '2026.10.27b',   // keep in sync with version.json (used for auto-update)
+    VERSION: '2026.10.27c',   // keep in sync with version.json (used for auto-update)
     W, H, MAX_INV, COLORS, SHAPES, SPECIAL_INFO, SPECIAL_FREQ, SPEEDS, MODES, DEFAULT_SETTINGS,
     Room, Player, BotBrain, pieceCells, isSpecial, encodeField, decodeField,
   });

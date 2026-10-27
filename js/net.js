@@ -66,9 +66,16 @@
 
   const params = new URLSearchParams(location.search);
   const JOIN_TIMEOUT = 20000;
-  const NO_DIRECT = "Couldn't connect to the host's phone. Check that the host still has Rowbusters open " +
-    "on the room screen (not switched to another app), then tap Join again. If it keeps failing, put both " +
-    'phones on the same Wi-Fi: some mobile networks block direct phone-to-phone connections.';
+  const t = (key, p) => RB.t(key, p);
+  const noDirect = () => t('net.noDirect');
+  // Server (and private-room host) messages carry a code and params, so each player reads them
+  // in their own language; older senders only send English text.
+  const srvText = m => {
+    if (!(m.code && RB.has('srv.' + m.code))) return cleanText(m.text || m.reason || '');
+    const p = {};
+    for (const [k, v] of Object.entries(m.p && typeof m.p === 'object' ? m.p : {})) p[k] = cleanText(String(v)).slice(0, 40);
+    return t('srv.' + m.code, p);
+  };
 
   // ------------------------------------------------------------ diagnostics
   const DIAG = [];
@@ -153,15 +160,16 @@
 
   function peerErrorText(err) {
     const map = {
-      'peer-unavailable': 'Room not found. Check the code, and that the host is still in the room.',
-      'network': 'Could not reach the connection server. Check your internet connection.',
-      'server-error': 'The connection server is not responding. Try again in a moment.',
-      'socket-error': 'Lost contact with the connection server.',
-      'socket-closed': 'Lost contact with the connection server.',
-      'browser-incompatible': 'This browser does not support online play (WebRTC).',
-      'webrtc': NO_DIRECT,
+      'peer-unavailable': 'net.notFound',
+      'network': 'net.noSignal',
+      'server-error': 'net.signalDown',
+      'socket-error': 'net.signalLost',
+      'socket-closed': 'net.signalLost',
+      'browser-incompatible': 'net.noWebrtc',
+      'webrtc': 'net.noDirect',
     };
-    return map[err && err.type] || ('Connection problem: ' + (err && (err.type || err.message) || 'unknown'));
+    const key = map[err && err.type];
+    return key ? t(key) : t('net.problem', { err: err && (err.type || err.message) || '?' });
   }
 
   // One PeerJS client per page for joining, reused between attempts: Safari with iCloud
@@ -186,7 +194,7 @@
   const PeerTransport = {
     name: 'peerjs',
     host(code, { onConnection, onReady, onError }) {
-      if (!window.Peer) { onError('Online library failed to load.'); return () => {}; }
+      if (!window.Peer) { onError(t('net.noLibrary')); return () => {}; }
       note(`host: opening room ${code}` + (params.get('peerhost') ? ` on ${params.get('peerhost')}` : ' on PeerJS cloud'));
       const peer = new window.Peer(ID_PREFIX + code.toLowerCase(), peerOptions());
       peer.on('open', () => { note('host: room registered on the connection server'); onReady(code); });
@@ -204,7 +212,7 @@
       return () => { try { peer.destroy(); } catch (e) { /* ignore */ } };
     },
     join(code, { onOpen, onError, onStage, timeout = JOIN_TIMEOUT }) {
-      if (!window.Peer) { onError('Online library failed to load.'); return () => {}; }
+      if (!window.Peer) { onError(t('net.noLibrary')); return () => {}; }
       const peer = getGuestPeer();
       let opened = false, failed = false, conn = null;
       const fail = (text, type) => {
@@ -217,10 +225,10 @@
       };
       // Without this, a connection that can never be made (e.g. strict mobile networks and no
       // working relay) would leave the guest on "Connecting…" forever.
-      const timer = setTimeout(() => fail(NO_DIRECT, 'timeout'), timeout);
+      const timer = setTimeout(() => fail(noDirect(), 'timeout'), timeout);
       const go = () => {
         if (failed) return;
-        onStage && onStage(`Contacting the host's phone (room ${code})…`);
+        onStage && onStage(t('net.contacting', { code }));
         note(`guest: asking the host of room ${code} to connect`);
         conn = peer.connect(ID_PREFIX + code.toLowerCase(), { reliable: true });
         watchConnection(conn, 'guest');
@@ -230,8 +238,8 @@
           note('guest: connected to the host');
           onOpen(wrapPeerConn(conn, 'guest'));
         });
-        conn.on('error', e => fail(NO_DIRECT, 'webrtc ' + (e && e.type)));
-        conn.on('close', () => fail(NO_DIRECT, 'webrtc closed'));
+        conn.on('error', e => fail(noDirect(), 'webrtc ' + (e && e.type)));
+        conn.on('close', () => fail(noDirect(), 'webrtc closed'));
       };
       const onPeerError = err => {
         if (opened) return;
@@ -239,7 +247,7 @@
       };
       peer.on('error', onPeerError);
       if (peer.open) go();
-      else { onStage && onStage('Reaching the connection server…'); peer.once('open', go); }
+      else { onStage && onStage(t('net.reaching')); peer.once('open', go); }
       return () => {
         clearTimeout(timer);
         peer.removeListener('error', onPeerError);
@@ -293,7 +301,7 @@
         else if (d.k === 'bye') handlers.close.forEach(f => f());
       };
       post({ k: 'hello', id });
-      setTimeout(() => { if (!opened) onError('Room not found. Check the code, and that the host is still in the room.', 'peer-unavailable'); }, 1500);
+      setTimeout(() => { if (!opened) onError(t('net.notFound'), 'peer-unavailable'); }, 1500);
       addEventListener('pagehide', () => post({ k: 'bye', from: id }));
       return () => ch.close();
     },
@@ -357,7 +365,7 @@
       this.isHost = true;
       this.name = cleanName(name);
       this.code = newCode();
-      this.emit('status', 'Creating room…');
+      this.emit('status', t('net.creating'));
       this.ready = false;
       this.teardown = transport.host(this.code, {
         onReady: code => {
@@ -373,7 +381,7 @@
             // Room already open: the connection server dropped (e.g. app was in the background),
             // or one guest's connection failed. Players already in the room stay connected.
             if (['network', 'socket-error', 'socket-closed', 'server-error', 'disconnected', 'unavailable-id'].includes(type))
-              this.emit('status', 'Reconnecting to the connection server… new players may not be able to join for a moment.');
+              this.emit('status', t('net.signalRetry'));
             return;
           }
           this.emit('error', text);
@@ -392,21 +400,21 @@
       if (g) g.rx = Date.now();
       if (m.t === 'ping') return;
       if (m.t === 'hello') {
-        if (m.v !== PROTO) { conn.send({ t: 'reject', reason: 'This room runs a different version of Rowbusters. Reload the page on both phones.' }); return; }
+        if (m.v !== PROTO) { conn.send({ t: 'reject', reason: 'This room runs a different version of Rowbusters. Reload the page on both phones.', code: 'otherVersion' }); return; }
         const cid = String(m.cid || conn.id).slice(0, 20);
         // A guest coming back after a dropped connection replaces its old, dead entry.
         let back = false;
         for (const [id, old] of this.guests) {
           if (old.cid === cid && id !== conn.id) { back = true; this.guestLeft(old.conn, true); old.conn.close(); }
         }
-        if (this.guests.size >= MAX_PLAYERS - 1) { conn.send({ t: 'reject', reason: `The room is full (${MAX_PLAYERS} players).` }); return; }
+        if (this.guests.size >= MAX_PLAYERS - 1) { conn.send({ t: 'reject', reason: `The room is full (${MAX_PLAYERS} players).`, code: 'full', p: { n: MAX_PLAYERS } }); return; }
         const name = cleanName(m.name);
         this.guests.set(conn.id, { conn, name, cid, rx: Date.now() });
         note(`host: ${name} ${back ? 'rejoined' : 'joined'} (version ${String(m.ver || '?').slice(0, 20)})`);
         conn.send({ t: 'welcome', id: conn.id, code: this.code });
         this.broadcastLobby();
-        const joined = { t: 'chat', system: true, text: `${name} ${back ? 'is back in' : 'joined'} the room` };
-        this.emit('chat', joined);
+        const joined = { t: 'chat', system: true, text: `${name} ${back ? 'is back in' : 'joined'} the room`, code: back ? 'back' : 'joined', p: { name } };
+        this.emit('chat', Object.assign({}, joined, { text: srvText(joined) }));
         this.toGuests(joined);
         return;
       }
@@ -431,8 +439,9 @@
       this.guests.delete(conn.id);
       note(`host: ${g.name} ${quiet ? 'reconnected on a new link' : 'left'}`);
       if (!quiet) {
-        this.emit('chat', { system: true, text: `${g.name} left the room` });
-        this.toGuests({ t: 'chat', system: true, text: `${g.name} left the room` });
+        const left = { t: 'chat', system: true, text: `${g.name} left the room`, code: 'left', p: { name: g.name } };
+        this.emit('chat', Object.assign({}, left, { text: srvText(left) }));
+        this.toGuests(left);
       }
       for (const [slot, owner] of this.inGame) {
         if (owner === conn.id) {
@@ -479,9 +488,9 @@
       this.isHost = false;
       this.code = cleanCode(code);
       this.name = cleanName(name);
-      if (this.code.length !== 5) { this.emit('error', 'Room codes have 5 letters or digits.'); return; }
+      if (this.code.length !== 5) { this.emit('error', t('net.codeLength')); return; }
       note(`guest: joining room ${this.code} as ${this.name}`);
-      this.emit('status', 'Connecting to room ' + this.code + '…');
+      this.emit('status', t('net.connecting', { code: this.code }));
       this.attempt();
     }
 
@@ -511,8 +520,8 @@
     lost(conn) {
       if (this.closed || conn !== this.conn) return;
       this.conn = null;
-      if (this.hostLeft) { this.close(); this.emit('closed', 'The host closed the room.'); return; }
-      if (!this.welcomed) { this.close(); this.emit('closed', 'Lost connection to the host.'); return; }
+      if (this.hostLeft) { this.close(); this.emit('closed', t('net.hostClosed')); return; }
+      if (!this.welcomed) { this.close(); this.emit('closed', t('net.lostHost')); return; }
       if (!this.reconnecting) {
         this.reconnecting = { until: Date.now() + RECONNECT_FOR_MS, tries: 0 };
         note('guest: lost the host; reconnecting');
@@ -527,11 +536,11 @@
       if (Date.now() > r.until) {
         note('guest: could not reconnect; giving up');
         this.close();
-        this.emit('closed', "Lost connection to the host and couldn't reconnect. Check that the host still has Rowbusters open.");
+        this.emit('closed', t('net.lostHostFinal'));
         return;
       }
       r.tries++;
-      this.emit('status', `Connection to the host lost – reconnecting (try ${r.tries})…`);
+      this.emit('status', t('net.retryHost', { n: r.tries }));
       clearTimeout(this.retryT);
       this.retryT = setTimeout(() => this.attempt(), r.tries === 1 ? 500 : 2500);
     }
@@ -547,7 +556,7 @@
           if (this.reconnecting) { this.reconnecting = null; note('guest: back in the room'); this.emit('reconnected'); }
           break;
         case 'bye': this.hostLeft = true; break;
-        case 'reject': note(`guest: rejected – ${m.reason}`); this.emit('error', m.reason); this.close(); break;
+        case 'reject': note(`guest: rejected – ${m.reason}`); this.emit('error', srvText(m)); this.close(); break;
         case 'lobby': this.emit('lobby', { code: m.code, players: (m.players || []).map(p => ({ name: cleanName(p.name), host: !!p.host })) }); break;
         case 'start':
           note('guest: game started by the host');
@@ -556,7 +565,7 @@
             settings: m.settings, me: this.myId,
           });
           break;
-        case 'chat': this.emit('chat', { name: m.system ? '' : cleanName(m.name), text: cleanText(m.text), system: !!m.system }); break;
+        case 'chat': this.emit('chat', { name: m.system ? '' : cleanName(m.name), text: m.system ? srvText(m) : cleanText(m.text), system: !!m.system }); break;
         default: this.emit('game', m);
       }
     }
@@ -679,10 +688,10 @@
     joinRoom(n, name, watch = false) {
       this.watch = !!watch;
       this.room = n | 0;
-      this.code = `Room ${this.room}`;
+      this.code = t('room.name', { n: this.room });
       this.name = cleanName(name);
       note(`server: joining ${this.code} as ${this.name} (${serverURL()})`);
-      this.emit('status', `Joining ${this.code}…`);
+      this.emit('status', t('net.joining', { room: this.code }));
       this.connect();
     }
 
@@ -691,7 +700,7 @@
       const base = serverURL().replace(/^http/, 'ws');
       let ws;
       try { ws = new WebSocket(`${base}/ws/room/${this.room}`); }
-      catch (e) { this.failed('Could not reach the Rowbusters server.'); return; }
+      catch (e) { this.failed(t('net.noServer')); return; }
       const timer = setTimeout(() => { if (ws.readyState !== 1) { note('server: no answer within 12 s'); try { ws.close(); } catch (e) { /* ignore */ } ended_(0, 'timeout'); } }, 12000);
       let opened = false, ended = false;
       // Handle the end of this socket once, whether the browser reports it or we close it
@@ -704,7 +713,7 @@
         if (this.ws === ws) { this.ws = null; this.conn = null; }
         note(`server: connection closed (${code}${reason ? ' ' + reason : ''})`);
         if (this.closed) return;
-        if (!opened && !this.reconnecting) { this.failed("Couldn't reach the Rowbusters server. Check your internet connection and try again."); return; }
+        if (!opened && !this.reconnecting) { this.failed(t('net.noServerCheck')); return; }
         this.lost();
       };
       ws.onopen = () => {
@@ -741,16 +750,16 @@
 
     lost() {
       if (this.closed) return;
-      if (!this.welcomed) { this.close(); this.emit('closed', 'Lost connection to the server.'); return; }
+      if (!this.welcomed) { this.close(); this.emit('closed', t('net.lostServer')); return; }
       if (!this.reconnecting) {
         this.reconnecting = { until: Date.now() + RECONNECT_FOR_MS, tries: 0 };
         note('server: connection lost; reconnecting');
         this.emit('reconnecting');
       }
       const r = this.reconnecting;
-      if (Date.now() > r.until) { this.close(); this.emit('closed', "Lost connection to the server and couldn't reconnect."); return; }
+      if (Date.now() > r.until) { this.close(); this.emit('closed', t('net.lostServerFinal')); return; }
       r.tries++;
-      this.emit('status', `Connection lost – reconnecting (try ${r.tries})…`);
+      this.emit('status', t('net.retry', { n: r.tries }));
       clearTimeout(this.retryT);
       this.retryT = setTimeout(() => this.connect(), r.tries === 1 ? 500 : 2500);
     }
@@ -789,7 +798,7 @@
         case 'role': this.isHost = !!m.host; note(`server: you are now ${this.isHost ? 'the host' : 'a guest'}`); this.emit('role', this.isHost); break;
         case 'reject':
           note(`server: rejected – ${m.reason}`);
-          this.failed(String(m.reason || 'Could not join.'));
+          this.failed(srvText(m) || t('net.couldNotJoin'));
           if (m.update) this.emit('update');          // this version is too old for the server
           break;
         case 'lobby': this.emit('lobby', { code: this.code, players: (m.players || []).map(p => ({ name: cleanName(p.name), host: !!p.host, dev: cleanDev(p.dev), team: cleanTeam(p.team), me: p.id === this.myId })), watchers: (m.watchers || []).map(cleanName), mode: String(m.mode || 'normal') }); break;
@@ -800,7 +809,7 @@
             settings: m.settings, me: this.myId,
           });
           break;
-        case 'chat': this.emit('chat', { name: m.system ? '' : cleanName(m.name), text: cleanText(m.text), system: !!m.system }); break;
+        case 'chat': this.emit('chat', { name: m.system ? '' : cleanName(m.name), text: m.system ? srvText(m) : cleanText(m.text), system: !!m.system }); break;
         case 'stats': if (Array.isArray(m.players)) this.emit('stats', cleanStats(m)); break;
         default: this.emit('game', m);
       }

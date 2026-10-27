@@ -10,6 +10,7 @@
 (function (RB) {
   'use strict';
 
+  const t = (key, p) => RB.t(key, p);
   const W = 1080, PAD = 60, BOX = W - PAD * 2;
   const C = { bg: '#160B2E', box: '#251550', line: '#34205E', text: '#F5F0FF', soft: '#C4B8E3', dim: '#A99BCB', lime: '#C6FF3D', dot: '#FFD84D' };
   const SANS = '"Space Grotesk", system-ui, -apple-system, "Segoe UI", sans-serif';
@@ -91,7 +92,7 @@
       const top = y + 30 + r * cellH;
       text(ctx, p.name, cx, top + 52, { font: `700 ${two ? 50 : 38}px ${SANS}`, color: p.color, align: 'center', maxW: two ? BOX * 0.42 : BOX / cols - 20 });
       text(ctx, p.wins, cx, top + (two ? 180 : 150), { font: `400 ${two ? 130 : 96}px ${DISPLAY}`, color: C.text, align: 'center' });
-      if (p.bot) text(ctx, 'bot', cx, top + (two ? 210 : 178), { font: `500 22px ${SANS}`, color: C.dim, align: 'center' });
+      if (p.bot) text(ctx, t('bot'), cx, top + (two ? 210 : 178), { font: `500 22px ${SANS}`, color: C.dim, align: 'center' });
     });
     if (two) text(ctx, '–', W / 2, y + 30 + 160, { font: `400 90px ${DISPLAY}`, color: C.dim, align: 'center' });
     y += scoreH + 36;
@@ -105,10 +106,10 @@
     const hdrFont = `700 ${many ? 24 : 28}px ${SANS}`;
     const initials = P.map(p => p.short).join('–');
     text(ctx, '#', gx[0], y + 52, { font: hdrFont, color: C.dim });
-    text(ctx, 'Winner', gx[1], y + 52, { font: hdrFont, color: C.dim, align: 'center' });
-    text(ctx, 'Time', gx[2], y + 52, { font: hdrFont, color: C.dim, align: 'center' });
-    text(ctx, `Lines ${initials}`, gx[3], y + 52, { font: hdrFont, color: C.dim, align: 'center', maxW: BOX * 0.22 });
-    text(ctx, `Sent ${initials}`, gx[4], y + 52, { font: hdrFont, color: C.dim, align: 'center', maxW: BOX * 0.2 });
+    text(ctx, t('sum.winner'), gx[1], y + 52, { font: hdrFont, color: C.dim, align: 'center' });
+    text(ctx, t('sum.time'), gx[2], y + 52, { font: hdrFont, color: C.dim, align: 'center' });
+    text(ctx, `${t('sum.lines')} ${initials}`, gx[3], y + 52, { font: hdrFont, color: C.dim, align: 'center', maxW: BOX * 0.22 });
+    text(ctx, `${t('sum.sent')} ${initials}`, gx[4], y + 52, { font: hdrFont, color: C.dim, align: 'center', maxW: BOX * 0.2 });
     s.games.forEach((g, i) => {
       const ry = y + head + i * rowH;
       ctx.fillStyle = C.line; ctx.fillRect(PAD + 30, ry, BOX - 60, 2);
@@ -122,12 +123,12 @@
     y += gamesH + 36;
 
     // Totals
-    const statRows = [['Games won', p => `${p.wins}/${p.games}`], ['Lines cleared', p => p.lines], ['Lines sent', p => p.sent],
-      ['Rowbusts (4×)', p => p.busts], ['Avg speed (PPM)', p => p.ppm], ['Specials used', p => p.used]];
+    const statRows = [[t('sum.gamesWon'), p => `${p.wins}/${p.games}`], [t('sum.linesCleared'), p => p.lines], [t('sum.linesSent'), p => p.sent],
+      [t('sum.busts'), p => p.busts], [t('sum.avgPpm'), p => p.ppm], [t('sum.used'), p => p.used]];
     if (two || P.length < 2) {
       const lh = 58, totH = 100 + 50 + statRows.length * lh + 20;
       panel(ctx, y, totH);
-      text(ctx, `TOTALS · ${s.total} PLAYED`, PAD + 40, y + 62, { font: `700 30px ${SANS}`, color: C.dim, spacing: 2 });
+      text(ctx, t('sum.totals', { time: s.total }).toUpperCase(), PAD + 40, y + 62, { font: `700 30px ${SANS}`, color: C.dim, spacing: 2 });
       const xs = P.length === 2 ? [PAD + BOX * 0.62, PAD + BOX * 0.86] : [PAD + BOX * 0.8];
       P.forEach((p, i) => text(ctx, p.name, xs[i], y + 122, { font: `700 34px ${SANS}`, color: p.color, align: 'center', maxW: BOX * 0.22 }));
       statRows.forEach(([label, f], r) => {
@@ -139,19 +140,19 @@
     } else {
       const lh = 66, totH = 100 + 40 + P.length * lh + 70;
       panel(ctx, y, totH);
-      text(ctx, `TOTALS · ${s.total} PLAYED`, PAD + 40, y + 62, { font: `700 30px ${SANS}`, color: C.dim, spacing: 2 });
+      text(ctx, t('sum.totals', { time: s.total }).toUpperCase(), PAD + 40, y + 62, { font: `700 30px ${SANS}`, color: C.dim, spacing: 2 });
       const tx = [PAD + 40, PAD + BOX * 0.5, PAD + BOX * 0.6, PAD + BOX * 0.7, PAD + BOX * 0.78, PAD + BOX * 0.87, PAD + BOX * 0.95];
-      ['Player', 'Won', 'Lines', 'Sent', '4×', 'PPM', 'Spec'].forEach((h, i) =>
+      [t('sum.player'), t('sum.won'), t('sum.lines'), t('sum.sent'), '4×', t('sum.ppm'), t('sum.spec')].forEach((h, i) =>
         text(ctx, h.toUpperCase(), tx[i], y + 118, { font: `700 22px ${SANS}`, color: C.dim, align: i ? 'center' : 'left' }));
       P.forEach((p, r) => {
         const ry = y + 140 + r * lh;
         ctx.fillStyle = C.line; ctx.fillRect(PAD + 30, ry, BOX - 60, 2);
         const base = ry + lh / 2 + 12;
-        text(ctx, p.name + (p.bot ? ' (bot)' : ''), tx[0], base, { font: `700 32px ${SANS}`, color: p.color, maxW: BOX * 0.38 });
+        text(ctx, p.name + (p.bot ? ` (${t('bot')})` : ''), tx[0], base, { font: `700 32px ${SANS}`, color: p.color, maxW: BOX * 0.38 });
         [`${p.wins}/${p.games}`, p.lines, p.sent, p.busts, p.ppm, p.used].forEach((v, i) =>
           text(ctx, v, tx[i + 1], base, { font: `700 30px ${SANS}`, align: 'center' }));
       });
-      text(ctx, '4× rowbusts · PPM average pieces per minute · Spec specials used', PAD + 40, y + totH - 28, { font: `500 22px ${SANS}`, color: C.dim, maxW: BOX - 80 });
+      text(ctx, t('sum.legend'), PAD + 40, y + totH - 28, { font: `500 22px ${SANS}`, color: C.dim, maxW: BOX - 80 });
       y += totH + 36;
     }
 

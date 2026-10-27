@@ -14,7 +14,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bungee&family=Space+Grotesk:wght@400;500;600;700&display=swap">
-<link rel="stylesheet" href="css/common.css?v=20261027b">
+<link rel="stylesheet" href="css/common.css?v=20261027c">
 <style>
   /* Portrait layout for up to 4 players: a slim status line on top so the playfield gets
      the space, your field on the left, the 3 opponents stacked on the right, special bar and
@@ -36,6 +36,7 @@
   .bar .stats { flex: 1; display: flex; justify-content: center; gap: 12px; font: 600 11px var(--font); letter-spacing: .06em; color: var(--dim); }
   .bar .stats b { font-variant-numeric: tabular-nums; }
   .bar .stats b { color: var(--text); }
+  .bar .stats i, .watchbar span i { font-style: normal; }
   .bar .chat { position: relative; width: 34px; height: 24px; display: grid; place-items: center; font-size: 14px; border-radius: 6px; touch-action: manipulation; }
   .bar .chat.unread::after { content: ""; position: absolute; top: 3px; right: 5px; width: 7px; height: 7px; border-radius: 50%; background: var(--accent); }
 
@@ -159,9 +160,9 @@
 </script>
   <div class="bar">
     <div class="logo" id="barLogo" role="img" aria-label="Rowbusters"></div>
-    <div class="stats"><span>LINES <b id="lines">0</b></span><span>LEVEL <b id="level">1</b></span></div>
-    <button class="chat" id="muteBtn" aria-label="Sound on/off">&#128264;</button>
-    <button class="chat" id="partyBtn" aria-label="Partyline chat">&#128172;</button>
+    <div class="stats"><span><i data-i18n="bar.lines">LINES</i> <b id="lines">0</b></span><span><i data-i18n="bar.level">LEVEL</i> <b id="level">1</b></span></div>
+    <button class="chat" id="muteBtn" aria-label="Sound on/off" data-i18n-aria="aria.sound">&#128264;</button>
+    <button class="chat" id="partyBtn" aria-label="Partyline chat" data-i18n-aria="aria.party">&#128172;</button>
   </div>
 
   <div class="main">
@@ -170,46 +171,53 @@
       <div class="log" id="log"></div>
     </div>
     <div class="side">
-      <div class="next-box"><canvas id="next" aria-label="Next piece"></canvas></div>
+      <div class="next-box"><canvas id="next" aria-label="Next piece" data-i18n-aria="aria.next"></canvas></div>
       <div class="opps" id="opps"></div>
     </div>
   </div>
 
   <div class="watchbar" id="watchbar">
-    <span>&#128065; Watching <b id="watchName"></b><small>tap a small field to follow that player</small></span>
-    <button id="watchLeave" type="button">Leave</button>
+    <span>&#128065; <i data-i18n="watch.watching">Watching</i> <b id="watchName"></b><small data-i18n="watch.tip">tap a small field to follow that player</small></span>
+    <button id="watchLeave" type="button" data-i18n="watch.leave">Leave</button>
   </div>
 
   <div class="pad">
     <div class="row" id="targets"></div>
     <div class="row">
-      <button id="bL" aria-label="Move left">&#9664;</button>
-      <button id="bD" aria-label="Soft drop">&#9660;</button>
-      <button id="bR" aria-label="Move right">&#9654;</button>
-      <button id="bRot" class="rot" aria-label="Rotate">&#10227;</button>
-      <button id="bDrop" class="drop" aria-label="Hard drop">&#10515;</button>
+      <button id="bL" aria-label="Move left" data-i18n-aria="aria.left">&#9664;</button>
+      <button id="bD" aria-label="Soft drop" data-i18n-aria="aria.soft">&#9660;</button>
+      <button id="bR" aria-label="Move right" data-i18n-aria="aria.right">&#9654;</button>
+      <button id="bRot" class="rot" aria-label="Rotate" data-i18n-aria="aria.rotate">&#10227;</button>
+      <button id="bDrop" class="drop" aria-label="Hard drop" data-i18n-aria="aria.drop">&#10515;</button>
     </div>
   </div>
 
   <div class="party" id="party">
-    <h3>Partyline <button id="partyClose">Close</button></h3>
+    <h3><span data-i18n="on.partyline">Partyline</span> <button id="partyClose" data-i18n="close">Close</button></h3>
     <div class="lines" id="partyLines"></div>
-    <form id="chatForm"><input id="chatIn" placeholder="Say something…" autocomplete="off"><button>Send</button></form>
+    <form id="chatForm"><input id="chatIn" placeholder="Say something…" data-i18n-ph="chat.placeholder" autocomplete="off"><button data-i18n="chat.send">Send</button></form>
   </div>
 
-<script src="js/engine.js?v=20261027b"></script>
-<script src="js/render.js?v=20261027b"></script>
-<script src="js/vendor/peerjs.min.js?v=20261027b"></script>
-<script src="js/config.js?v=20261027b"></script>
-<script src="js/net.js?v=20261027b"></script>
-<script src="js/sound.js?v=20261027b"></script>
-<script src="js/statsimage.js?v=20261027b"></script>
-<script src="js/app.js?v=20261027b"></script>
+<script src="js/i18n.js?v=20261027c"></script>
+<script src="js/i18n/en.js?v=20261027c"></script>
+<script src="js/i18n/es.js?v=20261027c"></script>
+<script src="js/i18n/pt.js?v=20261027c"></script>
+<script src="js/i18n/fr.js?v=20261027c"></script>
+<script src="js/i18n/de.js?v=20261027c"></script>
+<script src="js/engine.js?v=20261027c"></script>
+<script src="js/render.js?v=20261027c"></script>
+<script src="js/vendor/peerjs.min.js?v=20261027c"></script>
+<script src="js/config.js?v=20261027c"></script>
+<script src="js/net.js?v=20261027c"></script>
+<script src="js/sound.js?v=20261027c"></script>
+<script src="js/statsimage.js?v=20261027c"></script>
+<script src="js/app.js?v=20261027c"></script>
 <script>
 (function () {
   const R = RB.render;
   const $ = id => document.getElementById(id);
   $('barLogo').innerHTML = RB.LOGO;
+  RB.translatePage();
   let oppEls = [];
   const logLines = [];
 
@@ -220,7 +228,7 @@
       const el = document.createElement('div');
       el.className = 'opp';
       const mate = p.team && app.me && p.team === app.me.team;
-      el.innerHTML = `<div class="tag"><b class="${p.team ? 'tm' + p.team : ''}">${p.slot}${p.team || ''}</b><em>${mate ? 'partner · ' : ''}${p.name}</em></div><canvas></canvas>`;
+      el.innerHTML = `<div class="tag"><b class="${p.team ? 'tm' + p.team : ''}">${p.slot}${p.team || ''}</b><em>${mate ? RB.t('game.partner') : ''}${p.name}</em></div><canvas></canvas>`;
       if (mate) el.classList.add('mate');
       // Tap an opponent's field to fire your next special at them. It reacts on touch-down, like
       // the buttons: a 'click' arrives late on phones and is dropped right after a button press.
@@ -300,9 +308,9 @@
   }
 
   const app = RB.app({
-    title: 'Up to 4 players',
+    title: RB.t('lobby.title'),
     orientation: 'portrait',
-    subtitle: 'Buttons to move, rotate and drop. Number buttons 1–4 fire your first special at that player, D discards it. Or tap an opponent’s field to fire it at them.',
+    subtitle: RB.t('lobby.help'),
     onSetup: buildOpps,
     render(app) {
       const me = app.me;

@@ -24,7 +24,7 @@
  */
 import { DurableObject } from 'cloudflare:workers';
 
-const SERVER_VERSION = '2026.10.27b';   // shown on /health, to check which code is deployed
+const SERVER_VERSION = '2026.10.27c';   // shown on /health, to check which code is deployed
 const ROOMS = 7;
 const MAX_PLAYERS = 4;
 const MAX_WATCHERS = 8;
@@ -196,7 +196,9 @@ export class Hub extends DurableObject {
 
   send(c, m) { try { c.ws.send(JSON.stringify(m)); } catch (e) { /* socket closing */ } }
   toRoom(room, m, except) { for (const c of room.clients.concat(room.watchers)) if (c !== except) this.send(c, m); }
-  system(room, text) { this.toRoom(room, { t: 'chat', system: true, text }); }
+  // Room messages carry a code and params so each player's app can show them in their own
+  // language; the English text is for older apps.
+  system(room, text, code, p) { this.toRoom(room, { t: 'chat', system: true, text, code, p }); }
 
   onMessage(c, m) {
     const room = c.room;
@@ -204,7 +206,7 @@ export class Hub extends DurableObject {
     if (!c.joined) {
       if (m.t !== 'hello') return;
       if (m.v !== PROTO || !(typeof m.ver === 'string' && m.ver >= MIN_CLIENT_VERSION)) {
-        this.send(c, { t: 'reject', update: true, reason: 'A newer version of Rowbusters is needed to play online. Please update the game.' });
+        this.send(c, { t: 'reject', update: true, reason: 'A newer version of Rowbusters is needed to play online. Please update the game.', code: 'update' });
         c.ws.close(1000);
         return;
       }
@@ -226,14 +228,15 @@ export class Hub extends DurableObject {
       }
       // Full room (or asked to watch): join as a spectator.
       const watch = !resumed && (!!m.watch || room.clients.length >= MAX_PLAYERS);
-      if (watch && room.watchers.length >= MAX_WATCHERS) { this.send(c, { t: 'reject', reason: `Room ${room.n} is full, and so are its ${MAX_WATCHERS} spectator places. Try another room.` }); c.ws.close(1000); return; }
+      if (watch && room.watchers.length >= MAX_WATCHERS) { this.send(c, { t: 'reject', reason: `Room ${room.n} is full, and so are its ${MAX_WATCHERS} spectator places. Try another room.`, code: 'roomFull', p: { room: room.n, max: MAX_WATCHERS } }); c.ws.close(1000); return; }
       c.joined = true;
       c.spectator = watch;
       if (watch) room.watchers.push(c); else room.clients.push(c);
       if (!watch && !room.hostId) room.hostId = c.id;
       if (!watch) this.pickTeam(room, c);
       this.send(c, { t: 'welcome', id: c.id, room: room.n, host: room.hostId === c.id, playing: !!room.game, spectator: watch, resumed });
-      this.system(room, resumed ? `${c.name} reconnected – the game goes on` : `${c.name} ${old || away ? 'is back in' : watch ? 'is watching' : 'joined'} the room`);
+      const how = resumed ? 'resumed' : old || away ? 'back' : watch ? 'watching' : 'joined';
+      this.system(room, resumed ? `${c.name} reconnected – the game goes on` : `${c.name} ${old || away ? 'is back in' : watch ? 'is watching' : 'joined'} the room`, how, { name: c.name });
       if (room.game && !resumed) this.sendSnapshot(room, c);
       this.broadcastLobby(room);
       return;
@@ -245,7 +248,7 @@ export class Hub extends DurableObject {
         const now = Date.now();
         c.chats = c.chats.filter(t => now - t < LIMITS.chatWindowMs);
         if (c.chats.length >= LIMITS.chatPerWindow) {
-          this.send(c, { t: 'chat', system: true, text: `Slow down: up to ${LIMITS.chatPerWindow} messages every ${LIMITS.chatWindowMs / 1000} seconds.` });
+          this.send(c, { t: 'chat', system: true, text: `Slow down: up to ${LIMITS.chatPerWindow} messages every ${LIMITS.chatWindowMs / 1000} seconds.`, code: 'slow', p: { n: LIMITS.chatPerWindow, s: LIMITS.chatWindowMs / 1000 } });
           return;
         }
         c.chats.push(now);
@@ -258,7 +261,7 @@ export class Hub extends DurableObject {
         if (room.mode !== 'teams' || c.spectator || room.game || !TEAMS.includes(m.team) || c.team === m.team) return;
         if (room.clients.filter(x => x.team === m.team).length >= TEAM_SIZE) return;
         c.team = m.team;
-        this.system(room, `${c.name} joined team ${c.team}`);
+        this.system(room, `${c.name} joined team ${c.team}`, 'team', { name: c.name, team: c.team });
         this.broadcastLobby(room);
         return;
       }
@@ -302,7 +305,7 @@ export class Hub extends DurableObject {
     }
     if (teams) {
       if (TEAMS.some(t => !players.some(p => p.team === t))) {
-        this.send(c, { t: 'chat', system: true, text: 'Both teams need at least one player. Add a bot or ask someone to switch team.' });
+        this.send(c, { t: 'chat', system: true, text: 'Both teams need at least one player. Add a bot or ask someone to switch team.', code: 'teamsNeeded' });
         return;
       }
       players.sort((a, b) => a.team.localeCompare(b.team));   // team A takes slots 1-2, team B the rest
@@ -330,6 +333,7 @@ export class Hub extends DurableObject {
     const room = c.room, g = room.game;
     const slot = m.t === 'f' || m.t === 'dead' ? m.slot : m.from;
     if (g.owners.get(slot) !== c.id) return;            // only for your own players
+    if (m.t === 'dead' && !g.alive.has(slot)) return;   // sent again after a reconnect
     if (m.t === 'special' && g.settings.mode === 'pure') return;   // no specials in Pure games
     if (m.t === 'f') g.lastF.set(slot, m);
     this.track(g, slot, m);
@@ -414,7 +418,7 @@ export class Hub extends DurableObject {
       this.pickTeam(room, w);
       if (!room.hostId) room.hostId = w.id;
       this.send(w, { t: 'seat', host: room.hostId === w.id });
-      this.system(room, `${w.name} took a free seat`);
+      this.system(room, `${w.name} took a free seat`, 'seat', { name: w.name });
     }
   }
 
@@ -443,7 +447,7 @@ export class Hub extends DurableObject {
     const wi = room.watchers.indexOf(c);
     if (wi >= 0) {
       room.watchers.splice(wi, 1);
-      if (!replaced) this.system(room, `${c.name} stopped watching`);
+      if (!replaced) this.system(room, `${c.name} stopped watching`, 'unwatch', { name: c.name });
       this.broadcastLobby(room);
       return;
     }
@@ -458,17 +462,17 @@ export class Hub extends DurableObject {
         // Dropped (network blip, app in background…): keep their players for a few seconds.
         held = true;
         g.away.set(c.pid, { oldId: c.id, name: c.name, team: c.team, timer: setTimeout(() => this.expire(room, c.pid), GRACE_MS) });
-        this.system(room, `${c.name} lost connection – waiting ${GRACE_MS / 1000} s for them to come back`);
+        this.system(room, `${c.name} lost connection – waiting ${GRACE_MS / 1000} s for them to come back`, 'lost', { name: c.name, s: GRACE_MS / 1000 });
       } else this.knockOut(room, c.id);       // left on purpose: out now
     }
     if (room.hostId === c.id) {
       room.hostId = room.clients[0] ? room.clients[0].id : null;
       if (room.clients[0]) {
         this.send(room.clients[0], { t: 'role', host: true });
-        if (!replaced) this.system(room, `${room.clients[0].name} is now the host`);
+        if (!replaced) this.system(room, `${room.clients[0].name} is now the host`, 'host', { name: room.clients[0].name });
       }
     }
-    if (!replaced && !held) this.system(room, `${c.name} left the room`);
+    if (!replaced && !held) this.system(room, `${c.name} left the room`, 'left', { name: c.name });
     if (!room.clients.length && room.game && !room.game.away.size) room.game = null;
     if (!room.clients.length && !room.watchers.length && !room.game) room.botNames = null;
     this.checkEnd(room);
@@ -496,7 +500,7 @@ export class Hub extends DurableObject {
     const a = g && g.away.get(pid);
     if (!a) return;
     g.away.delete(pid);
-    this.system(room, `${a.name} did not come back and is out of this game`);
+    this.system(room, `${a.name} did not come back and is out of this game`, 'gone', { name: a.name });
     this.knockOut(room, a.oldId);
     if (!room.clients.length && !g.away.size) room.game = null;
     this.checkEnd(room);

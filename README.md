@@ -56,6 +56,10 @@ Short retro sound effects are generated in the browser (Web Audio), so there are
 - **Android and Linux phone browsers** (Firefox, Chromium, GNOME Web): leave *Play fullscreen* ticked in the lobby. The game goes fullscreen and locks to portrait when you tap Start.
 - **iPhone**: Safari has no fullscreen mode for web pages. Use *Share → Add to Home Screen* and launch Rowbusters from the icon. It then opens without browser bars (the lobby shows this tip on iPhone).
 
+## Languages
+
+The game speaks English, Spanish, Portuguese, French and German. It follows the phone's language, and the **Language** menu at the bottom of the lobby switches it (remembered on the device; `?lang=de` in the address also works). Every text lives in `js/i18n/<language>.js`, with English (`en.js`) as the source: to change a text, change it in all five files. Tests check that every language has every text with the same `{placeholders}`, and that every screen fits a 320-pixel-wide phone in every language. Messages from the server (someone joined, left, switched team…) travel as codes, so each player reads them in their own language; older app versions still get the English text.
+
 ## Updates
 
 The game checks `version.json` when it opens and whenever it comes back to the front. If the phone is showing an older saved copy, it reloads itself with the new version (only in the lobby, never mid-game or in an online room). When publishing a change, bump the version in both `version.json` and `js/engine.js` (`RB.VERSION`), and the `?v=` tags in `index.html`.
@@ -69,6 +73,8 @@ The `stable` branch holds the last known-good version for quick rollback.
 ## Code layout
 
 ```
+js/i18n.js     languages: picks the player's language, RB.t() looks texts up
+js/i18n/       the texts, one file per language (en.js is the source)
 js/engine.js   rules: Player, Room (routes lines/specials), BotBrain
 js/render.js   canvas drawing: fields, next piece, special bar
 js/sound.js    synthesised sound effects (Web Audio)
