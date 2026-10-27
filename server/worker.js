@@ -24,7 +24,7 @@
  */
 import { DurableObject } from 'cloudflare:workers';
 
-const SERVER_VERSION = '2026.10.24c';   // shown on /health, to check which code is deployed
+const SERVER_VERSION = '2026.10.27a';   // shown on /health, to check which code is deployed
 const ROOMS = 7;
 const MAX_PLAYERS = 4;
 const MAX_WATCHERS = 8;
@@ -287,7 +287,7 @@ export class Hub extends DurableObject {
   track(g, slot, m) {
     const st = g.stats.get(slot);
     if (!st || st.died) return;
-    const count = (v, max) => Math.max(0, Math.min(max, v | 0));
+    const count = (v, max) => Math.max(0, Math.min(Math.floor(max), v | 0));   // whole numbers only
     if (m.t === 'f' || m.t === 'dead') {
       // Counted by the phone; capped at what is physically possible.
       const secs = (Date.now() - g.started) / 1000;

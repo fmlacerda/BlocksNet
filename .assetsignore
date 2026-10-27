@@ -10,3 +10,10 @@ server
 wrangler.jsonc
 README.md
 docs
+package.json
+package-lock.json
+playwright.config.js
+tests
+test-results
+playwright-report
+CLAUDE.md

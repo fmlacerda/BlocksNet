@@ -1,3 +1,5 @@
 # local Cloudflare dev state and tools
 .wrangler/
 node_modules/
+test-results/
+playwright-report/
