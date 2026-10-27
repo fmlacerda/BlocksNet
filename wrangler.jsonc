@@ -20,5 +20,18 @@
     "bindings": [{ "name": "HUB", "class_name": "Hub" }]
   },
   "migrations": [{ "tag": "v1", "new_sqlite_classes": ["Hub"] }],
-  "observability": { "enabled": true }
+  "observability": { "enabled": true },
+  // Test copy for trying changes before players see them: its own Worker, address and empty
+  // ranking (https://rowbusters-staging.fmlacerda.workers.dev). Deployed with
+  // `npm run deploy:staging`, or by a second Cloudflare build that watches the `staging` branch.
+  "env": {
+    "staging": {
+      "name": "rowbusters-staging",
+      "workers_dev": true,
+      "preview_urls": false,
+      "durable_objects": {
+        "bindings": [{ "name": "HUB", "class_name": "Hub" }]
+      }
+    }
+  }
 }

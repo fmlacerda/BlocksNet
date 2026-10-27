@@ -1,0 +1,16 @@
+{
+  "name": "rowbusters",
+  "private": true,
+  "description": "Rowbusters: multiplayer block-dropping game (web + phone apps). The game itself needs no build step.",
+  "scripts": {
+    "dev": "wrangler dev --port 8787",
+    "test": "npm run test:unit && npm run test:e2e",
+    "test:unit": "node --test \"tests/unit/*.test.js\"",
+    "test:e2e": "playwright test",
+    "deploy:staging": "wrangler deploy --env staging"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.56.1",
+    "wrangler": "4.149.0"
+  }
+}

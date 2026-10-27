@@ -62,6 +62,10 @@ The game checks `version.json` when it opens and whenever it comes back to the f
 
 The `stable` branch holds the last known-good version for quick rollback.
 
+## Development and tests
+
+`npm install`, then `npm test` runs everything: the game rules (`tests/unit`, Node's test runner) and the server and browser tests (`tests/e2e`, Playwright), which start their own local server with an empty database. `npm run dev` serves the game and server locally at http://127.0.0.1:8787/?server=http://127.0.0.1:8787. Every pull request runs the same tests on GitHub (`.github/workflows/ci.yml`), including the Safari-engine tests. Changes go through pull requests; `main` deploys itself. A test copy of the server (`rowbusters-staging`) is defined in `wrangler.jsonc`. Notes for Claude Code sessions are in `CLAUDE.md`.
+
 ## Code layout
 
 ```
