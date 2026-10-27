@@ -12,7 +12,9 @@
   "main": "server/worker.js",
   "compatibility_date": "2025-09-01",
   "workers_dev": true,
-  "preview_urls": false,
+  // Pull-request previews get a link: https://<branch>-blocksnet.fmlacerda.workers.dev
+  // (takes effect once this is deployed from main).
+  "preview_urls": true,
   // Game files. A request that matches a file is served directly; anything else (/lobby,
   // /ws/room/<n>, /health) goes to server/worker.js.
   "assets": { "directory": "." },
