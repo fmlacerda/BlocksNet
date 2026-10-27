@@ -83,19 +83,21 @@ test('public room: chat, host-only start, stats card, summary and Copy image (ro
     await hostStart(host, 1, [guest]);
     await autoplay(host, guest);
     await host.waitForTimeout(3000);
-    await knockOut(g === 1 ? guest : host);                         // a different winner each game
+    // A different winner each game, decided here: game 1 Hal (Gus and the bot go out), game 2 Gus.
+    if (g === 1) { await knockOut(guest); await host.evaluate(() => { for (const p of RB.current.room.players) if (!p.remote && p.isBot) p.die(); }); }
+    else await knockOut(host);
     await gameOver(host, guest);
-    await expect(host.locator('#rb-chat .rb-stats')).toHaveCount(g);
+    await expect(host.locator('#rb-chat .rb-stats'), `stats cards after game ${g}`).toHaveCount(g);
   }
   const card = host.locator('#rb-chat .rb-stats').last();
   await expect(card.locator('.rb-st-head')).toContainText('Game 2 stats');
-  await expect(card.locator('tbody tr')).toHaveCount(3);
+  await expect(card.locator('tbody tr'), 'rows in the game 2 card').toHaveCount(3);
 
   await card.locator('.rb-st-sum').click();                         // the summary of both games
   await expect(host.locator('#rb-summary')).toBeVisible();
   await expect(host.locator('.rb-sum-top')).toContainText('Room 1');
-  await expect(host.locator('.rb-sum-games tbody tr')).toHaveCount(2);
-  await expect(host.locator('.rb-sum-cell')).toHaveCount(3);        // Hal, Gus and the bot
+  await expect(host.locator('.rb-sum-games tbody tr'), 'games in the summary').toHaveCount(2);
+  await expect(host.locator('.rb-sum-cell'), 'players in the summary').toHaveCount(3);        // Hal, Gus and the bot
 
   await host.click('#rb-sum-copy');
   await expect(host.locator('#rb-sum-copy')).toHaveText('Image copied ✓');

@@ -472,6 +472,8 @@
         if (s.public) { if (session === s) { session = null; show('rb-online', false); openMP(t); } return; }
         status(t, true); if (!s.isHost && !s.conn) { s.close(); session = null; }
       });
+      // Too old for the server: fetch the new version (web) once the room screen is gone.
+      s.on('update', () => setTimeout(checkUpdate, 50));
       s.on('closed', t => {
         if (session !== s) return;
         leaveOnline();

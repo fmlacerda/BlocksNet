@@ -609,6 +609,22 @@
    * every phone holds one WebSocket to the server, which relays messages, picks the host
    * (first player in the room), and decides when a game ends. Same events as Session.
    */
+  // Crash reports: uncaught errors go to the server's log (no player id or nickname), at most
+  // 5 different ones per visit. Only when a server is configured.
+  function reportErrors() {
+    const sent = new Set();
+    const report = (msg, src, line, col, stack) => {
+      const base = serverURL();
+      if (!base || sent.size >= 5 || sent.has(msg)) return;
+      sent.add(msg);
+      const body = JSON.stringify({ msg, src, line, col, stack, ver: RB.VERSION, where: location.hostname });
+      try { fetch(base + '/errors', { method: 'POST', body, keepalive: true, headers: { 'Content-Type': 'text/plain' } }).catch(() => {}); } catch (e) { /* offline */ }
+    };
+    addEventListener('error', e => report(String(e.message || 'error'), e.filename, e.lineno, e.colno, e.error && e.error.stack));
+    addEventListener('unhandledrejection', e => { const r = e.reason || {}; report('Unhandled: ' + String(r.message || r), '', 0, 0, r.stack); });
+  }
+  reportErrors();
+
   function serverURL() {
     const u = params.get('server') || (window.RB_CONFIG && window.RB_CONFIG.server) || '';
     return u.replace(/\/+$/, '');
@@ -771,7 +787,11 @@
           this.emit('role', this.isHost);
           break;
         case 'role': this.isHost = !!m.host; note(`server: you are now ${this.isHost ? 'the host' : 'a guest'}`); this.emit('role', this.isHost); break;
-        case 'reject': note(`server: rejected – ${m.reason}`); this.failed(String(m.reason || 'Could not join.')); break;
+        case 'reject':
+          note(`server: rejected – ${m.reason}`);
+          this.failed(String(m.reason || 'Could not join.'));
+          if (m.update) this.emit('update');          // this version is too old for the server
+          break;
         case 'lobby': this.emit('lobby', { code: this.code, players: (m.players || []).map(p => ({ name: cleanName(p.name), host: !!p.host, dev: cleanDev(p.dev), team: cleanTeam(p.team), me: p.id === this.myId })), watchers: (m.watchers || []).map(cleanName), mode: String(m.mode || 'normal') }); break;
         case 'start':
           note('server: game started');

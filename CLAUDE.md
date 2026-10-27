@@ -29,7 +29,9 @@ The owner is not a developer: explain outcomes in plain words, and ask before an
   `version.json`, `SERVER_VERSION` in `server/worker.js`, and every `?v=` tag in `index.html`
   (format `2026.10.24c` / `20261024c`). A unit test fails if they disagree.
 - Phones run their own copy of the rules and talk to the server: keep the protocol (`PROTO`)
-  backwards compatible, since old app versions stay in use for weeks.
+  backwards compatible, since old app versions stay in use for weeks. Raise `MIN_CLIENT_VERSION`
+  in `server/worker.js` only when old versions really can't play correctly any more.
+- Crash reports from players' devices land in the Worker log (`/errors`); limits are in `LIMITS`.
 - Names: global namespace `RB`, CSS classes and ids `rb-…`, storage keys `rb.…`.
   Brand colours are CSS variables at the top of `css/common.css`; block and special colours
   (engine `COLORS`, `SPECIAL_INFO`) are part of the game and stay as they are.
