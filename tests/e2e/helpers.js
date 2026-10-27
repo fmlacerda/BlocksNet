@@ -6,6 +6,7 @@ const BASE = process.env.RB_BASE || 'http://127.0.0.1:8787';
 const WS = BASE.replace(/^http/, 'ws') + '/ws/room/';
 const GAME_URL = `${BASE}/?server=${encodeURIComponent(BASE)}`;
 const PROTO = 1;
+const VERSION = require('../../version.json').version;
 
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
@@ -43,7 +44,7 @@ async function client(room, name, opts = {}) {
     for (const w of waiters.slice()) if (w.t === m.t && w.test(m)) { waiters.splice(waiters.indexOf(w), 1); w.resolve(m); }
   };
   await new Promise((res, rej) => { ws.onopen = res; ws.onerror = () => rej(new Error('ws error')); });
-  c.send({ t: 'hello', v: PROTO, name, pid: opts.pid || 'pid' + name.toLowerCase(), dev: opts.dev, watch: opts.watch });
+  c.send({ t: 'hello', v: PROTO, name, pid: opts.pid || 'pid' + name.toLowerCase(), ver: 'ver' in opts ? opts.ver : VERSION, dev: opts.dev, watch: opts.watch });
   await c.waitFor(opts.expectReject ? 'reject' : 'welcome');
   return c;
 }
@@ -99,4 +100,4 @@ async function gameOver(...pages) {
   for (const p of pages) await p.waitForFunction(() => !RB.current.room.running, null, { timeout: 120000 });
 }
 
-module.exports = { BASE, GAME_URL, PROTO, sleep, client, lobby, roomCard, emptyRoom, openGame, joinPublicRoom, hostStart, knockOut, autoplay, gameOver };
+module.exports = { BASE, GAME_URL, PROTO, VERSION, WS, sleep, client, lobby, roomCard, emptyRoom, openGame, joinPublicRoom, hostStart, knockOut, autoplay, gameOver };

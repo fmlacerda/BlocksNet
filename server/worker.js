@@ -24,12 +24,17 @@
  */
 import { DurableObject } from 'cloudflare:workers';
 
-const SERVER_VERSION = '2026.10.27a';   // shown on /health, to check which code is deployed
+const SERVER_VERSION = '2026.10.27b';   // shown on /health, to check which code is deployed
 const ROOMS = 7;
 const MAX_PLAYERS = 4;
 const MAX_WATCHERS = 8;
 const GRACE_MS = 10000;   // a player who drops mid-game keeps their seat this long
 const PROTO = 1;
+// Oldest game version allowed into public rooms; older ones are asked to update (the web version
+// reloads itself; store apps show an update message). Versions compare as text (YYYY.MM.DDx).
+const MIN_CLIENT_VERSION = '2026.10.12a';
+// Abuse limits, per connection unless noted.
+const LIMITS = { msgBytes: 16384, msgsPerSec: 100, chatPerWindow: 5, chatWindowMs: 10000, socketsPerIp: 12, errorsPerMin: 60 };
 const BOT_NAMES = ['Blockhead', 'LineLord', 'Nukem', 'Gravitas', 'QuakeBot', 'Specialist', 'T-Spin'];
 const SPEEDS = ['relaxed', 'classic', 'fast', 'turbo', 'insane'];
 const GAME_TYPES = ['f', 'lines', 'special', 'dead'];
@@ -51,7 +56,7 @@ const cleanText = t => String(t || '').slice(0, 200);
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Methods': 'GET, OPTIONS',
+  'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
   'Access-Control-Allow-Headers': 'Content-Type',
 };
 const json = (data, status = 200) => new Response(JSON.stringify(data), {
@@ -62,7 +67,8 @@ export default {
   async fetch(request, env) {
     const url = new URL(request.url);
     if (request.method === 'OPTIONS') return new Response(null, { headers: CORS });
-    if (url.pathname === '/health') return json({ ok: true, service: 'rowbusters', version: SERVER_VERSION, rooms: ROOMS });
+    if (url.pathname === '/health') return json({ ok: true, service: 'rowbusters', version: SERVER_VERSION, minClient: MIN_CLIENT_VERSION, rooms: ROOMS });
+    if (url.pathname === '/errors' && request.method === 'POST') return clientError(request);
     if (url.pathname === '/lobby' || url.pathname.startsWith('/ws/room/')) {
       const hub = env.HUB.get(env.HUB.idFromName('main'));
       return hub.fetch(request);
@@ -70,6 +76,21 @@ export default {
     return json({ error: 'not found' }, 404);
   },
 };
+
+// Error reports from players' devices: written to the Worker log (Cloudflare → Observability).
+// No IP address, player id or nickname is kept; only what went wrong, where, and the version.
+let errorWindow = { start: 0, n: 0 };
+async function clientError(request) {
+  const now = Date.now();
+  if (now - errorWindow.start > 60000) errorWindow = { start: now, n: 0 };
+  if (++errorWindow.n > LIMITS.errorsPerMin) return new Response(null, { status: 429, headers: CORS });
+  let e = {};
+  try { e = JSON.parse((await request.text()).slice(0, 4096)); } catch (err) { /* not JSON */ }
+  const clip = (v, n) => String(v || '').slice(0, n);
+  console.error('client error', JSON.stringify({ msg: clip(e.msg, 300), src: clip(e.src, 200), line: e.line | 0, col: e.col | 0,
+    stack: clip(e.stack, 1200), ver: clip(e.ver, 20), where: clip(e.where, 40), ua: clip(request.headers.get('User-Agent'), 160) }));
+  return new Response(null, { status: 204, headers: CORS });
+}
 
 export class Hub extends DurableObject {
   constructor(ctx, env) {
@@ -89,6 +110,7 @@ export class Hub extends DurableObject {
     // watchers = spectators beyond the 4 seats.
     this.rooms = Array.from({ length: ROOMS }, (_, i) => ({ n: i + 1, mode: ROOM_MODES[i] || 'normal', clients: [], watchers: [], hostId: null, game: null }));
     this.nextId = 1;
+    this.ipCount = new Map();
   }
 
   async fetch(request) {
@@ -98,10 +120,14 @@ export class Hub extends DurableObject {
     const room = m && this.rooms[+m[1] - 1];
     if (!room) return json({ error: 'no such room' }, 404);
     if (request.headers.get('Upgrade') !== 'websocket') return json({ error: 'expected a WebSocket' }, 426);
+    // A handful of open connections per network address is plenty (a family on one Wi-Fi).
+    const ip = request.headers.get('CF-Connecting-IP') || '';
+    if (ip && (this.ipCount.get(ip) || 0) >= LIMITS.socketsPerIp) return json({ error: 'too many connections' }, 429);
     const pair = new WebSocketPair();
     const [client, server] = Object.values(pair);
     server.accept();
-    this.attach(room, server);
+    if (ip) this.ipCount.set(ip, (this.ipCount.get(ip) || 0) + 1);
+    this.attach(room, server, ip);
     return new Response(null, { status: 101, webSocket: client });
   }
 
@@ -136,20 +162,36 @@ export class Hub extends DurableObject {
   }
 
   // ------------------------------------------------------------ connections
-  attach(room, ws) {
-    const c = { id: 'c' + (this.nextId++), ws, room, name: '', pid: '', joined: false };
+  attach(room, ws, ip = '') {
+    const c = { id: 'c' + (this.nextId++), ws, room, name: '', pid: '', joined: false, rate: { start: 0, n: 0 }, chats: [] };
+    let counted = !!ip;
+    const uncount = () => {
+      if (!counted) return;
+      counted = false;
+      const n = (this.ipCount.get(ip) || 1) - 1;
+      if (n > 0) this.ipCount.set(ip, n); else this.ipCount.delete(ip);
+    };
     ws.addEventListener('message', ev => {
+      if (typeof ev.data !== 'string' || ev.data.length > LIMITS.msgBytes) return;
+      // Message rate: a host running 3 bots sends ~45 a second. Way over that, drop; far over, disconnect.
+      const now = Date.now();
+      if (now - c.rate.start >= 1000) c.rate = { start: now, n: 0 };
+      if (++c.rate.n > LIMITS.msgsPerSec) {
+        if (c.rate.n > LIMITS.msgsPerSec * 3) { try { ws.close(1008, 'too many messages'); } catch (e) { /* closed */ } }
+        return;
+      }
       let m;
-      try { m = JSON.parse(typeof ev.data === 'string' ? ev.data : ''); } catch (e) { return; }
+      try { m = JSON.parse(ev.data); } catch (e) { return; }
       if (!m || typeof m !== 'object') return;
       try { this.onMessage(c, m); } catch (e) { /* never let one bad message break the room */ }
     });
     ws.addEventListener('close', ev => {
       // Complete the closing handshake, otherwise the phone keeps waiting for it.
       try { ws.close(ev.code === 1005 ? 1000 : ev.code, 'bye'); } catch (e) { /* already closed */ }
+      uncount();
       this.leave(c, false, ev.code);
     });
-    ws.addEventListener('error', () => this.leave(c, false, 1006));
+    ws.addEventListener('error', () => { uncount(); this.leave(c, false, 1006); });
   }
 
   send(c, m) { try { c.ws.send(JSON.stringify(m)); } catch (e) { /* socket closing */ } }
@@ -161,7 +203,11 @@ export class Hub extends DurableObject {
     if (m.t === 'ping') { this.send(c, { t: 'ping' }); return; }
     if (!c.joined) {
       if (m.t !== 'hello') return;
-      if (m.v !== PROTO) { this.send(c, { t: 'reject', reason: 'This version of Rowbusters is out of date. Reload the page.' }); c.ws.close(1000); return; }
+      if (m.v !== PROTO || !(typeof m.ver === 'string' && m.ver >= MIN_CLIENT_VERSION)) {
+        this.send(c, { t: 'reject', update: true, reason: 'A newer version of Rowbusters is needed to play online. Please update the game.' });
+        c.ws.close(1000);
+        return;
+      }
       c.name = cleanName(m.name);
       c.dev = cleanDev(m.dev);
       c.pid = cleanPid(m.pid) || c.id;
@@ -195,7 +241,15 @@ export class Hub extends DurableObject {
     switch (m.t) {
       case 'chat': {
         const text = cleanText(m.text).trim();
-        if (text) this.toRoom(room, { t: 'chat', name: c.name, text }, c);
+        if (!text) return;
+        const now = Date.now();
+        c.chats = c.chats.filter(t => now - t < LIMITS.chatWindowMs);
+        if (c.chats.length >= LIMITS.chatPerWindow) {
+          this.send(c, { t: 'chat', system: true, text: `Slow down: up to ${LIMITS.chatPerWindow} messages every ${LIMITS.chatWindowMs / 1000} seconds.` });
+          return;
+        }
+        c.chats.push(now);
+        this.toRoom(room, { t: 'chat', name: c.name, text }, c);
         return;
       }
       case 'start': return this.start(c, m);
