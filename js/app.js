@@ -561,7 +561,12 @@
       s.on('reconnected', info => {
         if (session !== s) return;
         if (s.public && room.running && !app.watching) {
-          if (info && info.resumed) { room.log(t('log.reconnected'), 'system'); return; }
+          if (info && info.resumed) {
+            room.log(t('log.reconnected'), 'system');
+            // A knock-out sent while the connection was down never arrived; without it the game never ends.
+            for (const p of room.players) if (!p.remote && !p.alive) s.send({ t: 'dead', slot: p.slot, pcs: p.pieces, lines: p.lines, bust: p.busts });
+            return;
+          }
           // Seat not kept (game over, or away too long): stop here; if the game is still
           // going, the server's snapshot that follows switches to watching it.
           room.running = false;

@@ -333,6 +333,7 @@ export class Hub extends DurableObject {
     const room = c.room, g = room.game;
     const slot = m.t === 'f' || m.t === 'dead' ? m.slot : m.from;
     if (g.owners.get(slot) !== c.id) return;            // only for your own players
+    if (m.t === 'dead' && !g.alive.has(slot)) return;   // sent again after a reconnect
     if (m.t === 'special' && g.settings.mode === 'pure') return;   // no specials in Pure games
     if (m.t === 'f') g.lastF.set(slot, m);
     this.track(g, slot, m);
