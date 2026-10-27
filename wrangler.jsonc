@@ -21,6 +21,15 @@
   },
   "migrations": [{ "tag": "v1", "new_sqlite_classes": ["Hub"] }],
   "observability": { "enabled": true },
+  // Previews: every pull request gets its own copy at a workers.dev address (Cloudflare runs
+  // `wrangler preview` for non-production branches). Each preview gets a NEW, empty database
+  // (Durable Object namespace), never the live ranking. Bindings are not inherited, so HUB is
+  // declared again here.
+  "previews": {
+    "durable_objects": {
+      "bindings": [{ "name": "HUB", "class_name": "Hub" }]
+    }
+  },
   // Test copy for trying changes before players see them: its own Worker, address and empty
   // ranking (https://rowbusters-staging.fmlacerda.workers.dev). Deployed with
   // `npm run deploy:staging`, or by a second Cloudflare build that watches the `staging` branch.

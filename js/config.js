@@ -13,12 +13,14 @@
  * };
  */
 // Address of the Rowbusters server for public rooms and the ranking (server/worker.js).
-// On rowbusters.com the game and the server share the address; any other copy (GitHub Pages,
-// a local test server) uses the Worker's own address. Empty = no Multiplayer button.
+// Copies served by a Worker (rowbusters.com, the live and staging Workers, pull-request previews
+// on *.fmlacerda.workers.dev) talk to the Worker that served them, so a preview or the staging
+// copy never plays on the live server. Other copies (GitHub Pages, a plain local web server) use
+// the live Worker's address. Empty = no Multiplayer button.
 // The Worker keeps its original name 'blocksnet': renaming it would start a new server with an
 // empty ranking.
 window.RB_CONFIG = window.RB_CONFIG || {
-  server: /(^|\.)rowbusters\.com$|^blocksnet\.fmlacerda\.workers\.dev$/.test(location.hostname)
+  server: /(^|\.)rowbusters\.com$|\.fmlacerda\.workers\.dev$/.test(location.hostname)
     ? location.origin : 'https://blocksnet.fmlacerda.workers.dev',
   turn: [],
 };
