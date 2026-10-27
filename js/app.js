@@ -71,6 +71,13 @@
   const LOGO = `<span class="rb-mark-wrap">${MARK}</span><span class="rb-word"><b>ROW</b>BUSTERS</span>`;
   RB.LOGO = LOGO;
 
+  // Sign-in buttons, in each provider's own colours and mark.
+  const SSO_MARK = {
+    apple: '<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M16.4 12.6c0-2.3 1.9-3.4 2-3.5-1.1-1.6-2.8-1.8-3.4-1.8-1.4-.1-2.8.9-3.5.9s-1.8-.8-3-.8c-1.5 0-3 .9-3.8 2.3-1.6 2.8-.4 6.9 1.2 9.2.8 1.1 1.7 2.3 2.9 2.3 1.1 0 1.6-.7 3-.7s1.8.7 3 .7c1.2 0 2-1.1 2.8-2.2.9-1.3 1.2-2.5 1.3-2.6-.1 0-2.5-.9-2.5-3.8zM14.1 5.9c.6-.8 1.1-1.8.9-2.9-.9 0-2 .6-2.7 1.4-.6.7-1.1 1.7-.9 2.8 1 .1 2.1-.5 2.7-1.3z"/></svg>',
+    google: '<svg viewBox="0 0 48 48" aria-hidden="true"><path fill="#EA4335" d="M24 9.5c3.5 0 6.7 1.2 9.2 3.6l6.9-6.9C35.9 2.4 30.5 0 24 0 14.6 0 6.5 5.4 2.6 13.2l8 6.2C12.4 13.7 17.7 9.5 24 9.5z"/><path fill="#4285F4" d="M47 24.6c0-1.6-.2-3.1-.4-4.6H24v9h12.9c-.6 3-2.3 5.5-4.8 7.2l7.7 6c4.5-4.2 7.2-10.4 7.2-17.6z"/><path fill="#FBBC05" d="M10.5 28.6c-.5-1.5-.8-3-.8-4.6s.3-3.1.8-4.6l-8-6.2C.9 16.5 0 20.1 0 24s.9 7.5 2.6 10.8l7.9-6.2z"/><path fill="#34A853" d="M24 48c6.5 0 11.9-2.1 15.9-5.8l-7.7-6c-2.2 1.5-4.9 2.3-8.2 2.3-6.3 0-11.6-4.2-13.5-9.9l-8 6.2C6.5 42.6 14.6 48 24 48z"/></svg>',
+    microsoft: '<svg viewBox="0 0 22 22" aria-hidden="true"><path fill="#F25022" d="M1 1h9.5v9.5H1z"/><path fill="#7FBA00" d="M11.5 1H21v9.5h-9.5z"/><path fill="#00A4EF" d="M1 11.5h9.5V21H1z"/><path fill="#FFB900" d="M11.5 11.5H21V21h-9.5z"/></svg>',
+  };
+
   // Device icons for the round stats, the ranking and the Partyline player list.
   const DEV_SVG = {
     phone: '<svg viewBox="0 0 16 16" aria-hidden="true"><rect x="4.5" y="1.5" width="7" height="13" rx="1.6"/><path d="M7 12.2h2"/></svg>',
@@ -123,6 +130,7 @@
           <div class="rb-mp-top"><div class="rb-logo" role="img" aria-label="Rowbusters">${LOGO}</div><span>${t('mp.title')}</span></div>
           <div class="rb-mp-me" id="rb-mp-me">${t('mp.loading')}</div>
           <p class="rb-status error" id="rb-mp-msg"></p>
+          <div class="rb-acct hidden" id="rb-acct"></div>
           <div class="rb-h2">${t('mp.rooms')}</div>
           <div class="rb-rooms" id="rb-rooms"></div>
           <div class="rb-h2">${t('mp.top')}</div>
@@ -590,15 +598,36 @@
     // ---------------------------------------------------------- public rooms screen
     let mpTimer = null, mpData = null, mpPeriod = 'top';
     const esc = t => String(t).replace(/[&<>"]/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[ch]));
-    function openMP(message) {
+    function openMP(message, ok = false) {
       show('rb-lobby', false); show('rb-online', false); show('rb-end', false); show('rb-mp', true);
       $('rb-mp-msg').textContent = message || '';
+      $('rb-mp-msg').classList.toggle('error', !ok);
       refreshMP();
+      renderAccount();
       clearInterval(mpTimer);
       mpTimer = setInterval(() => { if ($('rb-mp').classList.contains('hidden')) clearInterval(mpTimer); else refreshMP(); }, 3000);
     }
+    // Signed in: who with, sign out, delete. Signed out: the providers' buttons.
+    async function renderAccount() {
+      const box = $('rb-acct');
+      if (!box || !RB.account) return;
+      const cur = RB.account.current();
+      const list = cur ? [] : await RB.account.providers();
+      box.innerHTML = cur
+        ? `<p>${t('acct.signedIn', { provider: t('acct.' + cur.provider) })}</p>` +
+          `<div class="rb-acct-row"><button class="rb-linkbtn" data-act="signout" type="button">${t('acct.signOut')}</button>` +
+          `<button class="rb-linkbtn" data-act="delete" type="button">${t('acct.delete')}</button></div>`
+        : `<p class="rb-hint">${t('acct.why')}</p><div class="rb-acct-btns">${list.map(p =>
+          `<button class="rb-sso rb-sso-${p}" data-provider="${p}" type="button">${SSO_MARK[p]}<span>${t('acct.continue.' + p)}</span></button>`).join('')}</div>`;
+      show('rb-acct', !!(cur || list.length));
+    }
     async function refreshMP() {
-      try { mpData = await RB.net.fetchLobby(); renderMP(); }
+      try {
+        mpData = await RB.net.fetchLobby();
+        // Account deleted from another device: this one is a guest again.
+        if (mpData.account === null && RB.account && RB.account.current()) { try { localStorage.removeItem('rb.account'); } catch (e) { /* storage off */ } renderAccount(); }
+        renderMP();
+      }
       catch (e) { $('rb-mp-me').textContent = t('mp.cantLoad', { err: e.message }); }
     }
     function renderMP() {
@@ -717,6 +746,20 @@
         $('rb-mp-open').addEventListener('click', () => { $('rb-lobby-msg').textContent = ''; readSettings(); openMP(); });
         $('rb-mp-back').addEventListener('click', () => { clearInterval(mpTimer); show('rb-mp', false); show('rb-lobby', true); });
         $('rb-rooms').addEventListener('click', e => { const b = e.target.closest('.rb-join[data-room]'); if (b) joinPublic(+b.dataset.room, !!b.dataset.watch); });
+        $('rb-acct').addEventListener('click', async e => {
+          const b = e.target.closest('button');
+          if (!b) return;
+          if (b.dataset.provider) { readSettings(); RB.account.start(b.dataset.provider); return; }
+          if (b.dataset.act === 'signout') { RB.account.signOut(); openMP(t('acct.signedOut'), true); return; }
+          if (b.dataset.act === 'delete' && confirm(t('acct.confirmDelete'))) {
+            try { await RB.account.remove(); openMP(t('acct.deleted'), true); }
+            catch (err) { openMP(t('acct.err.deleteFailed')); }
+          }
+        });
+        // Back from a provider's sign-in page.
+        if (RB.account) RB.account.finish().then(r => {
+          if (r) openMP(r.error ? t('acct.err.' + r.error) : t('acct.welcome', { provider: t('acct.' + r.provider) }), !r.error);
+        });
         document.querySelectorAll('.rb-period button').forEach(b => b.addEventListener('click', () => {
           mpPeriod = b.dataset.period;
           document.querySelectorAll('.rb-period button').forEach(x => x.classList.toggle('on', x === b));

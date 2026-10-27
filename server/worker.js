@@ -21,10 +21,14 @@
  *   each player's all-time totals.
  * - GET /lobby returns the rooms, the top players (all time and last 7 days) and, with
  *   ?pid=, your own rank.
+ * - Accounts (optional): POST /auth/signin with a provider's ID token links the player's id to a
+ *   scrambled account key (server/auth.js), so one person keeps one ranking line on every device.
+ *   POST /account/delete removes the account and its results. GET /auth/config lists providers.
  */
 import { DurableObject } from 'cloudflare:workers';
+import { authConfig, verifySignIn } from './auth.js';
 
-const SERVER_VERSION = '2026.10.27c';   // shown on /health, to check which code is deployed
+const SERVER_VERSION = '2026.10.27d';   // shown on /health, to check which code is deployed
 const ROOMS = 7;
 const MAX_PLAYERS = 4;
 const MAX_WATCHERS = 8;
@@ -34,7 +38,7 @@ const PROTO = 1;
 // reloads itself; store apps show an update message). Versions compare as text (YYYY.MM.DDx).
 const MIN_CLIENT_VERSION = '2026.10.12a';
 // Abuse limits, per connection unless noted.
-const LIMITS = { msgBytes: 16384, msgsPerSec: 100, chatPerWindow: 5, chatWindowMs: 10000, socketsPerIp: 12, errorsPerMin: 60 };
+const LIMITS = { msgBytes: 16384, msgsPerSec: 100, chatPerWindow: 5, chatWindowMs: 10000, socketsPerIp: 12, errorsPerMin: 60, signInsPerMin: 20 };
 const BOT_NAMES = ['Blockhead', 'LineLord', 'Nukem', 'Gravitas', 'QuakeBot', 'Specialist', 'T-Spin'];
 const SPEEDS = ['relaxed', 'classic', 'fast', 'turbo', 'insane'];
 const GAME_TYPES = ['f', 'lines', 'special', 'dead'];
@@ -69,6 +73,8 @@ export default {
     if (request.method === 'OPTIONS') return new Response(null, { headers: CORS });
     if (url.pathname === '/health') return json({ ok: true, service: 'rowbusters', version: SERVER_VERSION, minClient: MIN_CLIENT_VERSION, rooms: ROOMS });
     if (url.pathname === '/errors' && request.method === 'POST') return clientError(request);
+    if (url.pathname === '/auth/config') return json(authConfig(env));
+    if ((url.pathname === '/auth/signin' || url.pathname === '/account/delete') && request.method === 'POST') return account(request, env, url.pathname);
     if (url.pathname === '/lobby' || url.pathname.startsWith('/ws/room/')) {
       const hub = env.HUB.get(env.HUB.idFromName('main'));
       return hub.fetch(request);
@@ -76,6 +82,30 @@ export default {
     return json({ error: 'not found' }, 404);
   },
 };
+
+// Sign-in and account deletion. The player id (kept on the device) is what the game plays under;
+// signing in swaps it for the account's id, so every device of one person shares one ranking line.
+let signInWindow = new Map();
+async function account(request, env, path) {
+  const ip = request.headers.get('CF-Connecting-IP') || '';
+  const now = Date.now();
+  const w = signInWindow.get(ip);
+  if (!w || now - w.start > 60000) signInWindow.set(ip, { start: now, n: 1 });
+  else if (++w.n > LIMITS.signInsPerMin) return json({ error: 'slow down' }, 429);
+  if (signInWindow.size > 5000) signInWindow = new Map();
+  let b = {};
+  try { b = JSON.parse((await request.text()).slice(0, 10000)); } catch (e) { return json({ error: 'bad request' }, 400); }
+  const pid = cleanPid(b.pid);
+  const hub = env.HUB.get(env.HUB.idFromName('main'));
+  if (path === '/account/delete') {
+    if (!pid) return json({ error: 'bad request' }, 400);
+    return json(await hub.deleteAccount(pid));
+  }
+  const provider = String(b.provider || '');
+  const v = await verifySignIn(env, { provider, idToken: b.idToken, nonce: String(b.nonce || '') });
+  if (v.error) return json({ error: v.error }, 401);
+  return json(await hub.link(v.key, provider, pid));
+}
 
 // Error reports from players' devices: written to the Worker log (Cloudflare → Observability).
 // No IP address, player id or nickname is kept; only what went wrong, where, and the version.
@@ -101,6 +131,9 @@ export class Hub extends DurableObject {
       games INTEGER NOT NULL DEFAULT 0, updated INTEGER NOT NULL DEFAULT 0)`);
     this.sql.exec(`CREATE TABLE IF NOT EXISTS results (pid TEXT NOT NULL, ts INTEGER NOT NULL, win INTEGER NOT NULL)`);
     this.sql.exec(`CREATE INDEX IF NOT EXISTS results_ts ON results (ts)`);
+    // Accounts: a scrambled key per signed-in person (no email, no name) and the player id it plays as.
+    this.sql.exec(`CREATE TABLE IF NOT EXISTS accounts (key TEXT PRIMARY KEY, pid TEXT NOT NULL, provider TEXT NOT NULL, created INTEGER NOT NULL)`);
+    this.sql.exec(`CREATE INDEX IF NOT EXISTS accounts_pid ON accounts (pid)`);
     // All-time stat totals (added later; ALTER fails harmlessly once the column exists).
     try { this.sql.exec(`ALTER TABLE players RENAME COLUMN tetrises TO busts`); } catch (e) { /* new or already renamed */ }
     for (const col of ['pieces', 'lines', 'busts', 'sent', 'specials', 'play_ms', 'best_ppm', 'devices']) {
@@ -131,6 +164,44 @@ export class Hub extends DurableObject {
     return new Response(null, { status: 101, webSocket: client });
   }
 
+  // ------------------------------------------------------------ accounts (called by the Worker)
+  link(key, provider, pid) {
+    const owned = p => this.sql.exec(`SELECT 1 FROM accounts WHERE pid = ?`, p).toArray().length > 0;
+    const acct = this.sql.exec(`SELECT pid FROM accounts WHERE key = ?`, key).toArray()[0];
+    if (acct) {
+      // This device's guest results join the account: one ranking line per person.
+      if (pid && pid !== acct.pid && !owned(pid)) this.mergePlayer(pid, acct.pid);
+      return { pid: acct.pid, created: false };
+    }
+    // A new account keeps this device's results, unless the device already plays for another account.
+    const use = pid.length >= 12 && !owned(pid) ? pid : [...crypto.getRandomValues(new Uint8Array(10))].map(b => b.toString(16).padStart(2, '0')).join('');
+    this.sql.exec(`INSERT INTO accounts (key, pid, provider, created) VALUES (?, ?, ?, ?)`, key, use, provider, Date.now());
+    return { pid: use, created: true };
+  }
+
+  mergePlayer(from, to) {
+    const r = this.sql.exec(`SELECT * FROM players WHERE pid = ?`, from).toArray()[0];
+    if (r) {
+      this.sql.exec(`INSERT INTO players (pid, name, wins, games, updated, pieces, lines, busts, sent, specials, play_ms, best_ppm, devices)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(pid) DO UPDATE SET wins = wins + excluded.wins, games = games + excluded.games, updated = MAX(updated, excluded.updated),
+          pieces = pieces + excluded.pieces, lines = lines + excluded.lines, busts = busts + excluded.busts,
+          sent = sent + excluded.sent, specials = specials + excluded.specials, play_ms = play_ms + excluded.play_ms,
+          best_ppm = MAX(best_ppm, excluded.best_ppm), devices = devices | excluded.devices`,
+        to, r.name, r.wins, r.games, r.updated, r.pieces, r.lines, r.busts, r.sent, r.specials, r.play_ms, r.best_ppm, r.devices);
+      this.sql.exec(`DELETE FROM players WHERE pid = ?`, from);
+    }
+    this.sql.exec(`UPDATE results SET pid = ? WHERE pid = ?`, to, from);
+  }
+
+  // Removes the account (if any) and every result recorded for this player id.
+  deleteAccount(pid) {
+    this.sql.exec(`DELETE FROM accounts WHERE pid = ?`, pid);
+    this.sql.exec(`DELETE FROM players WHERE pid = ?`, pid);
+    this.sql.exec(`DELETE FROM results WHERE pid = ?`, pid);
+    return { deleted: true };
+  }
+
   // ------------------------------------------------------------ lobby data
   summary(pid) {
     const rooms = this.rooms.map(r => ({
@@ -158,7 +229,8 @@ export class Hub extends DurableObject {
             ppm: row.play_ms ? Math.round(row.pieces / (row.play_ms / 60000)) : 0, bestPpm: row.best_ppm } };
       }
     }
-    return { rooms, top, week, me, maxPlayers: MAX_PLAYERS };
+    const acct = pid ? this.sql.exec(`SELECT provider FROM accounts WHERE pid = ?`, pid).toArray()[0] : null;
+    return { rooms, top, week, me, account: acct ? acct.provider : null, maxPlayers: MAX_PLAYERS };
   }
 
   // ------------------------------------------------------------ connections

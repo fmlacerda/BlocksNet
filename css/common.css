@@ -299,3 +299,15 @@ button { font: inherit; color: inherit; border: 0; background: none; cursor: poi
 .rb-sum-games.many th { font-size: 10px; padding: 4px 2px 8px; }
 .rb-sum-games.many td { font-size: 13px; padding: 8px 2px; }
 .rb-sum-games.many td.w { max-width: 84px; }
+
+/* Accounts: sign-in buttons on the Multiplayer screen (each in its provider's own style). */
+.rb-acct { display: flex; flex-direction: column; gap: 8px; text-align: center; font-size: 13px; color: var(--soft); }
+.rb-acct-btns { display: flex; flex-direction: column; gap: 6px; }
+.rb-sso { display: flex; align-items: center; justify-content: center; gap: 10px; min-height: 44px; padding: 8px 12px; border-radius: 10px; font: 600 15px var(--font); touch-action: manipulation; }
+.rb-sso svg { width: 18px; height: 18px; flex: 0 0 18px; }
+.rb-sso-apple { background: #000; color: #fff; border: 1px solid #000; }
+.rb-sso-google { background: #fff; color: #1f1f1f; border: 1px solid #747775; }
+.rb-sso-microsoft { background: #fff; color: #5e5e5e; border: 1px solid #8c8c8c; }
+.rb-acct-row { display: flex; justify-content: center; gap: 12px; }
+#rb-mp-msg { word-break: normal; }
+#rb-mp-msg:not(.error) { color: var(--accent); }

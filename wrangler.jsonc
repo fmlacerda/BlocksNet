@@ -23,6 +23,13 @@
   },
   "migrations": [{ "tag": "v1", "new_sqlite_classes": ["Hub"] }],
   "observability": { "enabled": true },
+  // Sign-in providers (server/auth.js). Client ids are public, not secrets; empty = that button is
+  // hidden. APPLE_CLIENT_IDS: the Services ID for the web, then the app's bundle id.
+  "vars": {
+    "APPLE_CLIENT_IDS": "com.rowbusters.web,com.rowbusters.app",
+    "GOOGLE_CLIENT_ID": "",
+    "MICROSOFT_CLIENT_ID": ""
+  },
   // Previews: every pull request gets its own copy at a workers.dev address (Cloudflare runs
   // `wrangler preview` for non-production branches). Each preview gets a NEW, empty database
   // (Durable Object namespace), never the live ranking. Bindings are not inherited, so HUB is
