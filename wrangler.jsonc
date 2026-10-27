@@ -26,7 +26,7 @@
   // Sign-in providers (server/auth.js). Client ids are public, not secrets; empty = that button is
   // hidden. APPLE_CLIENT_IDS: the Services ID for the web, then the app's bundle id.
   "vars": {
-    "APPLE_CLIENT_IDS": "",
+    "APPLE_CLIENT_IDS": "com.rowbusters.web,com.rowbusters.app",
     "GOOGLE_CLIENT_ID": "",
     "MICROSOFT_CLIENT_ID": ""
   },
