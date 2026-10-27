@@ -60,19 +60,20 @@ test('the server only accepts genuine, fresh tokens meant for this game', async 
 test('one person, two devices: one ranking line; delete removes it all', async () => {
   const devA = 'devicealice01', devB = 'devicealice02';
   await rankedWin(devA, 'otherplayer01');
-  const first = await signIn({ idToken: token(), pid: devA });       // first sign-in keeps this device's results
-  expect(first).toMatchObject({ status: 200, pid: devA, created: true });
+  const first = await signIn({ idToken: token(), pid: devA, name: 'Alicia' });   // first sign-in keeps this device's results
+  expect(first).toMatchObject({ status: 200, pid: devA, created: true, name: 'Alicia' });
 
   await rankedWin(devB, 'otherplayer01');                           // a second device, still a guest
   expect((await lobby(devB)).me).toMatchObject({ wins: 1 });
-  const second = await signIn({ idToken: token(), pid: devB });     // same person signs in there
-  expect(second).toMatchObject({ status: 200, pid: devA, created: false });
+  const second = await signIn({ idToken: token(), pid: devB, name: 'Ally' });     // same person signs in there
+  expect(second).toMatchObject({ status: 200, pid: devA, created: false, name: 'Alicia' });   // the account's nickname
   const L = await lobby(devA);
   expect(L.me).toMatchObject({ wins: 2, games: 2 });                // both devices' wins, one line
   expect(L.account).toBe('test');
   expect((await lobby(devB)).me).toBeNull();
-  expect(L.top.filter(r => r.name.startsWith('Win')).length).toBe(1);
-  expect(JSON.stringify(L)).not.toMatch(/alice/);                   // nothing about the person leaves the server
+  expect(L.top.filter(r => r.name === 'Alicia').length).toBe(1);
+  expect(L.top.filter(r => r.name.startsWith('Win')).length).toBe(0);
+  expect(JSON.stringify(L)).not.toMatch(/alice\b|devicealice/);                   // nothing about the person leaves the server
 
   const del = await fetch(BASE + '/account/delete', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ pid: devA }) });
   expect(del.status).toBe(200);
@@ -126,4 +127,53 @@ test('in the game: the button leaves for the provider asking for no email; back 
   await expect(p.locator('#rb-mp-msg')).toContainText('try again');
   expect(p.errors).toEqual([]);
   await p.context().close();
+});
+
+test('nicknames are unique: guests get a variant, accounts own theirs on every device (room 5)', async () => {
+  const acc = await signIn({ idToken: token({ sub: 'nina' }), pid: 'devicenina001', name: 'Nina' });
+  expect(acc.name).toBe('Nina');
+  // A guest choosing an account's nickname plays under a variant, and is told which.
+  const guest = await client(5, 'nina', { pid: 'guestnina0001' });
+  expect(guest.last('welcome').name).toBe('nina2');
+  // The account's own devices get its nickname, whatever the device had typed.
+  const mine = await client(5, 'Whatever', { pid: 'devicenina001' });
+  expect(mine.last('welcome').name).toBe('Nina');
+  // Two guests online with one nickname: the second gets a variant.
+  const g2 = await client(5, 'Zoe', { pid: 'guestzoe00001' }), g3 = await client(5, 'ZOE', { pid: 'guestzoe00002' });
+  expect([g2.last('welcome').name, g3.last('welcome').name]).toEqual(['Zoe', 'ZOE2']);
+  for (const x of [guest, mine, g2, g3]) x.close();
+  await emptyRoom(5);
+  // Renaming a signed-in account: unique too, and the ranking line follows.
+  const ren = n => fetch(BASE + '/account/name', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ pid: 'devicenina001', name: n }) }).then(r => r.json());
+  await signIn({ idToken: token({ sub: 'yara' }), pid: 'deviceyara001', name: 'Yara' });
+  expect(await ren('yara')).toEqual({ name: 'yara2' });             // taken by another account
+  expect(await ren('Nena')).toEqual({ name: 'Nena' });
+  expect((await lobby('devicenina001')).accountName).toBe('Nena');
+  const notSignedIn = await fetch(BASE + '/account/name', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ pid: 'guestzoe00001', name: 'X' }) });
+  expect(notSignedIn.status).toBe(404);
+});
+
+test('in the game: a guest whose nickname is taken is told, and plays under the variant (room 7)', async ({ browser }) => {
+  const p = await openGame(browser, 'Nena');                        // the account above owns "Nena"
+  await p.click('#rb-mp-open');
+  await p.click('.rb-join[data-room="7"]');
+  await expect(p.locator('#rb-chat')).toContainText('“Nena” is already taken, so you play as Nena2');
+  await expect(p.locator('#rb-plist')).toContainText('Nena2');
+  await p.click('#rb-leave');
+  await expect(p.locator('#rb-name')).toHaveValue('Nena2');          // remembered for next time
+  expect(p.errors).toEqual([]);
+  await p.context().close();
+  await emptyRoom(7);
+});
+
+test('one account on two devices in the same room: the second is told, not swapped in (room 6)', async () => {
+  await signIn({ idToken: token({ sub: 'omar' }), pid: 'deviceomar001', name: 'Omar' });
+  const phone = await client(6, 'Omar', { pid: 'deviceomar001', did: 'phone1' });
+  const laptop = await client(6, 'Omar', { pid: 'deviceomar001', did: 'laptop1', expectReject: true });
+  expect(laptop.last('reject')).toMatchObject({ code: 'elsewhere' });
+  expect(phone.ws.readyState).toBe(WebSocket.OPEN);                 // the first device stays in
+  const back = await client(6, 'Omar', { pid: 'deviceomar001', did: 'phone1' });   // same device reconnecting: fine
+  expect(back.last('welcome')).toBeTruthy();
+  phone.close(); back.close();
+  await emptyRoom(6);
 });

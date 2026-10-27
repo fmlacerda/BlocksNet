@@ -269,4 +269,10 @@
   'acct.err.expired': 'El inicio de sesión tardó demasiado o empezó en otra pestaña. Inténtalo de nuevo.',
   'acct.err.failed': 'No se pudo iniciar sesión. Inténtalo de nuevo.',
   'acct.err.deleteFailed': 'No se pudo eliminar la cuenta. Revisa tu conexión e inténtalo de nuevo.',
+
+  // nicknames
+  'on.nameTaken': '“{was}” ya está en uso, así que juegas como {name}. Inicia sesión para que un apodo sea tuyo.',
+  'acct.nameTaken': '“{was}” ya está en uso, así que tu apodo es {name}.',
+  'acct.err.renameFailed': 'No se pudo guardar tu apodo. Revisa tu conexión e inténtalo de nuevo.',
+  'srv.elsewhere': 'Ya estás en esta sala en otro dispositivo.',
 };

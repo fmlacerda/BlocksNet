@@ -28,7 +28,7 @@
 import { DurableObject } from 'cloudflare:workers';
 import { authConfig, verifySignIn } from './auth.js';
 
-const SERVER_VERSION = '2026.10.27d';   // shown on /health, to check which code is deployed
+const SERVER_VERSION = '2026.10.27e';   // shown on /health, to check which code is deployed
 const ROOMS = 7;
 const MAX_PLAYERS = 4;
 const MAX_WATCHERS = 8;
@@ -38,7 +38,7 @@ const PROTO = 1;
 // reloads itself; store apps show an update message). Versions compare as text (YYYY.MM.DDx).
 const MIN_CLIENT_VERSION = '2026.10.12a';
 // Abuse limits, per connection unless noted.
-const LIMITS = { msgBytes: 16384, msgsPerSec: 100, chatPerWindow: 5, chatWindowMs: 10000, socketsPerIp: 12, errorsPerMin: 60, signInsPerMin: 20 };
+const LIMITS = { msgBytes: 16384, msgsPerSec: 100, chatPerWindow: 5, chatWindowMs: 10000, socketsPerIp: 12, errorsPerMin: 60, signInsPerMin: 30 };
 const BOT_NAMES = ['Blockhead', 'LineLord', 'Nukem', 'Gravitas', 'QuakeBot', 'Specialist', 'T-Spin'];
 const SPEEDS = ['relaxed', 'classic', 'fast', 'turbo', 'insane'];
 const GAME_TYPES = ['f', 'lines', 'special', 'dead'];
@@ -74,7 +74,7 @@ export default {
     if (url.pathname === '/health') return json({ ok: true, service: 'rowbusters', version: SERVER_VERSION, minClient: MIN_CLIENT_VERSION, rooms: ROOMS });
     if (url.pathname === '/errors' && request.method === 'POST') return clientError(request);
     if (url.pathname === '/auth/config') return json(authConfig(env));
-    if ((url.pathname === '/auth/signin' || url.pathname === '/account/delete') && request.method === 'POST') return account(request, env, url.pathname);
+    if (['/auth/signin', '/account/delete', '/account/name'].includes(url.pathname) && request.method === 'POST') return account(request, env, url.pathname);
     if (url.pathname === '/lobby' || url.pathname.startsWith('/ws/room/')) {
       const hub = env.HUB.get(env.HUB.idFromName('main'));
       return hub.fetch(request);
@@ -87,12 +87,6 @@ export default {
 // signing in swaps it for the account's id, so every device of one person shares one ranking line.
 let signInWindow = new Map();
 async function account(request, env, path) {
-  const ip = request.headers.get('CF-Connecting-IP') || '';
-  const now = Date.now();
-  const w = signInWindow.get(ip);
-  if (!w || now - w.start > 60000) signInWindow.set(ip, { start: now, n: 1 });
-  else if (++w.n > LIMITS.signInsPerMin) return json({ error: 'slow down' }, 429);
-  if (signInWindow.size > 5000) signInWindow = new Map();
   let b = {};
   try { b = JSON.parse((await request.text()).slice(0, 10000)); } catch (e) { return json({ error: 'bad request' }, 400); }
   const pid = cleanPid(b.pid);
@@ -101,10 +95,21 @@ async function account(request, env, path) {
     if (!pid) return json({ error: 'bad request' }, 400);
     return json(await hub.deleteAccount(pid));
   }
+  if (path === '/account/name') {
+    const r = pid && await hub.renameAccount(pid, cleanName(b.name));
+    return r ? json(r) : json({ error: 'not signed in' }, 404);
+  }
+  // Checking a token can mean fetching the provider's keys: limit attempts per network address.
+  const ip = request.headers.get('CF-Connecting-IP') || '';
+  const now = Date.now();
+  const w = signInWindow.get(ip);
+  if (!w || now - w.start > 60000) signInWindow.set(ip, { start: now, n: 1 });
+  else if (++w.n > LIMITS.signInsPerMin) return json({ error: 'slow down' }, 429);
+  if (signInWindow.size > 5000) signInWindow = new Map();
   const provider = String(b.provider || '');
   const v = await verifySignIn(env, { provider, idToken: b.idToken, nonce: String(b.nonce || '') });
   if (v.error) return json({ error: v.error }, 401);
-  return json(await hub.link(v.key, provider, pid));
+  return json(await hub.link(v.key, provider, pid, cleanName(b.name)));
 }
 
 // Error reports from players' devices: written to the Worker log (Cloudflare → Observability).
@@ -134,6 +139,8 @@ export class Hub extends DurableObject {
     // Accounts: a scrambled key per signed-in person (no email, no name) and the player id it plays as.
     this.sql.exec(`CREATE TABLE IF NOT EXISTS accounts (key TEXT PRIMARY KEY, pid TEXT NOT NULL, provider TEXT NOT NULL, created INTEGER NOT NULL)`);
     this.sql.exec(`CREATE INDEX IF NOT EXISTS accounts_pid ON accounts (pid)`);
+    // The account's nickname: the same on every device, and nobody else's.
+    try { this.sql.exec(`ALTER TABLE accounts ADD COLUMN name TEXT NOT NULL DEFAULT ''`); } catch (e) { /* exists */ }
     // All-time stat totals (added later; ALTER fails harmlessly once the column exists).
     try { this.sql.exec(`ALTER TABLE players RENAME COLUMN tetrises TO busts`); } catch (e) { /* new or already renamed */ }
     for (const col of ['pieces', 'lines', 'busts', 'sent', 'specials', 'play_ms', 'best_ppm', 'devices']) {
@@ -144,6 +151,41 @@ export class Hub extends DurableObject {
     this.rooms = Array.from({ length: ROOMS }, (_, i) => ({ n: i + 1, mode: ROOM_MODES[i] || 'normal', clients: [], watchers: [], hostId: null, game: null }));
     this.nextId = 1;
     this.ipCount = new Map();
+    this.uniqueRankingNames();
+  }
+
+  // ------------------------------------------------------------ nicknames
+  // Each nickname belongs to one player: in the ranking, and among everyone online. Taken by
+  // someone else (case ignored) → the player gets a numbered variant ("Ana" → "Ana2").
+  nameTaken(name, pid) {
+    const lc = name.toLowerCase();
+    if (this.sql.exec(`SELECT 1 FROM players WHERE name = ? COLLATE NOCASE AND pid != ? LIMIT 1`, name, pid).toArray().length) return true;
+    if (this.sql.exec(`SELECT 1 FROM accounts WHERE name = ? COLLATE NOCASE AND pid != ? LIMIT 1`, name, pid).toArray().length) return true;
+    return this.rooms.some(r => r.clients.concat(r.watchers).some(c => c.joined && c.pid !== pid && c.name.toLowerCase() === lc));
+  }
+  uniqueName(name, pid) {
+    if (!this.nameTaken(name, pid)) return name;
+    for (let n = 2; n < 1000; n++) {
+      const v = name.slice(0, 12 - String(n).length) + n;
+      if (!this.nameTaken(v, pid)) return v;
+    }
+    return name;
+  }
+  // Once: ranking lines that share a nickname (from before names were unique). The line with the
+  // most games keeps it; the others get a numbered variant.
+  uniqueRankingNames() {
+    this.sql.exec(`CREATE TABLE IF NOT EXISTS meta (k TEXT PRIMARY KEY, v TEXT)`);
+    if (this.sql.exec(`SELECT 1 FROM meta WHERE k = 'unique_names'`).toArray().length) return;
+    const seen = new Set();
+    for (const r of this.sql.exec(`SELECT pid, name FROM players ORDER BY games DESC, updated DESC`).toArray()) {
+      if (!seen.has(r.name.toLowerCase())) { seen.add(r.name.toLowerCase()); continue; }
+      let n = 2, v;
+      do { v = r.name.slice(0, 12 - String(n).length) + n++; } while (seen.has(v.toLowerCase()) ||
+        this.sql.exec(`SELECT 1 FROM players WHERE name = ? COLLATE NOCASE`, v).toArray().length);
+      seen.add(v.toLowerCase());
+      this.sql.exec(`UPDATE players SET name = ? WHERE pid = ?`, v, r.pid);
+    }
+    this.sql.exec(`INSERT INTO meta (k, v) VALUES ('unique_names', '1')`);
   }
 
   async fetch(request) {
@@ -165,18 +207,33 @@ export class Hub extends DurableObject {
   }
 
   // ------------------------------------------------------------ accounts (called by the Worker)
-  link(key, provider, pid) {
+  link(key, provider, pid, name) {
     const owned = p => this.sql.exec(`SELECT 1 FROM accounts WHERE pid = ?`, p).toArray().length > 0;
-    const acct = this.sql.exec(`SELECT pid FROM accounts WHERE key = ?`, key).toArray()[0];
+    const acct = this.sql.exec(`SELECT pid, name FROM accounts WHERE key = ?`, key).toArray()[0];
     if (acct) {
       // This device's guest results join the account: one ranking line per person.
       if (pid && pid !== acct.pid && !owned(pid)) this.mergePlayer(pid, acct.pid);
-      return { pid: acct.pid, created: false };
+      if (!acct.name) return { pid: acct.pid, created: false, name: this.setAccountName(acct.pid, name) };
+      this.sql.exec(`UPDATE players SET name = ? WHERE pid = ?`, acct.name, acct.pid);
+      return { pid: acct.pid, created: false, name: acct.name };
     }
     // A new account keeps this device's results, unless the device already plays for another account.
     const use = pid.length >= 12 && !owned(pid) ? pid : [...crypto.getRandomValues(new Uint8Array(10))].map(b => b.toString(16).padStart(2, '0')).join('');
     this.sql.exec(`INSERT INTO accounts (key, pid, provider, created) VALUES (?, ?, ?, ?)`, key, use, provider, Date.now());
-    return { pid: use, created: true };
+    return { pid: use, created: true, name: this.setAccountName(use, name) };
+  }
+
+  // The account's nickname (made unique), also on its ranking line. Returns the name it got.
+  setAccountName(pid, name) {
+    const n = this.uniqueName(name, pid);
+    this.sql.exec(`UPDATE accounts SET name = ? WHERE pid = ?`, n, pid);
+    this.sql.exec(`UPDATE players SET name = ? WHERE pid = ?`, n, pid);
+    for (const r of this.rooms) for (const c of r.clients.concat(r.watchers)) if (c.pid === pid) c.name = n;
+    return n;
+  }
+  renameAccount(pid, name) {
+    if (!this.sql.exec(`SELECT 1 FROM accounts WHERE pid = ?`, pid).toArray().length) return null;
+    return { name: this.setAccountName(pid, name) };
   }
 
   mergePlayer(from, to) {
@@ -229,8 +286,8 @@ export class Hub extends DurableObject {
             ppm: row.play_ms ? Math.round(row.pieces / (row.play_ms / 60000)) : 0, bestPpm: row.best_ppm } };
       }
     }
-    const acct = pid ? this.sql.exec(`SELECT provider FROM accounts WHERE pid = ?`, pid).toArray()[0] : null;
-    return { rooms, top, week, me, account: acct ? acct.provider : null, maxPlayers: MAX_PLAYERS };
+    const acct = pid ? this.sql.exec(`SELECT provider, name FROM accounts WHERE pid = ?`, pid).toArray()[0] : null;
+    return { rooms, top, week, me, account: acct ? acct.provider : null, accountName: acct ? acct.name : null, maxPlayers: MAX_PLAYERS };
   }
 
   // ------------------------------------------------------------ connections
@@ -285,10 +342,20 @@ export class Hub extends DurableObject {
       c.name = cleanName(m.name);
       c.dev = cleanDev(m.dev);
       c.pid = cleanPid(m.pid) || c.id;
+      c.did = cleanPid(m.did);
+      // Signed in: the account's nickname. Otherwise the chosen one, unless someone else has it.
+      const acctName = this.sql.exec(`SELECT name FROM accounts WHERE pid = ?`, c.pid).toArray()[0];
+      c.name = acctName && acctName.name ? acctName.name : this.uniqueName(c.name, c.pid);
       // Same player coming back (e.g. after a dropped connection): replace the old link.
       // Same player back on a new link (old link not noticed as dead yet, or dropped within
       // the grace period): hand their seat and players in the running game to the new link.
       const old = room.clients.concat(room.watchers).find(x => x.pid === c.pid);
+      // …but one account on two devices in the same room is two people, not a reconnect.
+      if (old && old.did && c.did && old.did !== c.did) {
+        this.send(c, { t: 'reject', reason: 'You are already in this room on another device.', code: 'elsewhere' });
+        c.ws.close(1000);
+        return;
+      }
       let resumeFrom = null;
       if (old && old.team) c.team = old.team;
       if (old) { resumeFrom = old.id; this.leave(old, true); try { old.ws.close(1000, 'replaced'); } catch (e) { /* ignore */ } }
@@ -306,7 +373,7 @@ export class Hub extends DurableObject {
       if (watch) room.watchers.push(c); else room.clients.push(c);
       if (!watch && !room.hostId) room.hostId = c.id;
       if (!watch) this.pickTeam(room, c);
-      this.send(c, { t: 'welcome', id: c.id, room: room.n, host: room.hostId === c.id, playing: !!room.game, spectator: watch, resumed });
+      this.send(c, { t: 'welcome', id: c.id, room: room.n, host: room.hostId === c.id, playing: !!room.game, spectator: watch, resumed, name: c.name });
       const how = resumed ? 'resumed' : old || away ? 'back' : watch ? 'watching' : 'joined';
       this.system(room, resumed ? `${c.name} reconnected – the game goes on` : `${c.name} ${old || away ? 'is back in' : watch ? 'is watching' : 'joined'} the room`, how, { name: c.name });
       if (room.game && !resumed) this.sendSnapshot(room, c);
