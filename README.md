@@ -64,6 +64,14 @@ Players can stay guests, or sign in with **Apple, Google or Microsoft (Hotmail, 
 
 Each provider needs a one-time registration whose public client id goes into `vars` in `wrangler.jsonc` (`APPLE_CLIENT_IDS`, `GOOGLE_CLIENT_ID`, `MICROSOFT_CLIENT_ID`); a provider without one shows no button. The return addresses to register are `https://rowbusters.com/` and `https://blocksnet.fmlacerda.workers.dev/`. Tests use a throwaway test provider whose keys exist only on the local test server.
 
+## Keeping online play friendly
+
+- **Online rules:** the first time someone plays online they accept a short set of rules (be kind, no offensive chat or nicknames), with links to the [terms](terms.html) and [privacy policy](privacy.html). App stores require this for games with chat.
+- **Filter:** offensive words in chat are masked and offensive nicknames are replaced (`server/moderation.js`; English, Spanish, Portuguese, French and German, also disguised like "$h1t").
+- **Report and block:** tap a player in a room to report them (offensive chat, offensive nickname, cheating) or to block them (their chat is hidden on that device). A player reported by 3 different players within a day has their chat paused for a day, and a nickname reported as offensive is replaced. Every report goes to the Worker log (Cloudflare → Workers → blocksnet → Observability: search "player report") with the room's last 20 chat lines, for review.
+- **Privacy and terms pages:** `privacy.html` and `terms.html`, in all five languages, are written by `tools/make-legal.py` (edit the texts there and rerun it; the second argument is the contact email).
+- **Play now:** joins the public room most likely to have a game soon; alone there, the game starts with bots after 15 seconds, and anyone who joins meanwhile plays too.
+
 ## Languages
 
 The game speaks English, Spanish, Portuguese, French and German. It follows the phone's language, and the **Language** menu at the bottom of the lobby switches it (remembered on the device; `?lang=de` in the address also works). Every text lives in `js/i18n/<language>.js`, with English (`en.js`) as the source: to change a text, change it in all five files. Tests check that every language has every text with the same `{placeholders}`, and that every screen fits a 320-pixel-wide phone in every language. Messages from the server (someone joined, left, switched team…) travel as codes, so each player reads them in their own language; older app versions still get the English text.

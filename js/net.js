@@ -821,6 +821,8 @@
           break;
         case 'chat': this.emit('chat', { name: m.system ? '' : cleanName(m.name), text: m.system ? srvText(m) : cleanText(m.text), system: !!m.system }); break;
         case 'stats': if (Array.isArray(m.players)) this.emit('stats', cleanStats(m)); break;
+        // Nickname replaced after reports from other players.
+        case 'rename': { const was = this.name; this.name = cleanName(m.name); this.emit('renamed', { name: this.name, was, reported: true }); break; }
         default: this.emit('game', m);
       }
     }
@@ -831,6 +833,7 @@
       this.conn.send({ t: 'start', settings, bots: botCount, skill: botSkill });
     }
     setTeam(team) { if (this.conn) this.conn.send({ t: 'team', team }); }
+    report(name, reason) { if (this.conn) this.conn.send({ t: 'report', name, reason }); }
     send(m) { if (this.conn) this.conn.send(m); }
     chat(text) {
       const t = cleanText(text).trim();
