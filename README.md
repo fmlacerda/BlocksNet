@@ -56,6 +56,12 @@ Short retro sound effects are generated in the browser (Web Audio), so there are
 - **Android and Linux phone browsers** (Firefox, Chromium, GNOME Web): leave *Play fullscreen* ticked in the lobby. The game goes fullscreen and locks to portrait when you tap Start.
 - **iPhone**: Safari has no fullscreen mode for web pages. Use *Share → Add to Home Screen* and launch Rowbusters from the icon. It then opens without browser bars (the lobby shows this tip on iPhone).
 
+## Accounts (optional sign-in)
+
+Players can stay guests, or sign in with **Apple, Google or Microsoft (Hotmail, Outlook)** on the Multiplayer screen so that every device of theirs shares one line in the ranking (their guest results from each device are added in). The providers are asked for no email, and the server stores none: only a scrambled key per person (`server/auth.js` checks each provider's signed ID token). Players can sign out (the device becomes a guest again) or delete their account, which removes it and all its results.
+
+Each provider needs a one-time registration whose public client id goes into `vars` in `wrangler.jsonc` (`APPLE_CLIENT_IDS`, `GOOGLE_CLIENT_ID`, `MICROSOFT_CLIENT_ID`); a provider without one shows no button. The return addresses to register are `https://rowbusters.com/` and `https://blocksnet.fmlacerda.workers.dev/`. Tests use a throwaway test provider whose keys exist only on the local test server.
+
 ## Languages
 
 The game speaks English, Spanish, Portuguese, French and German. It follows the phone's language, and the **Language** menu at the bottom of the lobby switches it (remembered on the device; `?lang=de` in the address also works). Every text lives in `js/i18n/<language>.js`, with English (`en.js`) as the source: to change a text, change it in all five files. Tests check that every language has every text with the same `{placeholders}`, and that every screen fits a 320-pixel-wide phone in every language. Messages from the server (someone joined, left, switched team…) travel as codes, so each player reads them in their own language; older app versions still get the English text.
@@ -78,6 +84,7 @@ js/i18n/       the texts, one file per language (en.js is the source)
 js/engine.js   rules: Player, Room (routes lines/specials), BotBrain
 js/render.js   canvas drawing: fields, next piece, special bar
 js/sound.js    synthesised sound effects (Web Audio)
+js/account.js  optional sign-in (Apple, Google, Microsoft), sign out, delete account
 js/net.js      online rooms: PeerJS / same-browser transports, host relay, room codes, invites
 js/statsimage.js  game summary drawn as a PNG for "Copy image"
 js/app.js      shared shell: lobby, online room screens, game loop, keyboard, buttons, winlist, haptics

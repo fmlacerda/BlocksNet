@@ -13,8 +13,10 @@ The owner is not a developer: explain outcomes in plain words, and ask before an
   `js/sound.js` synthesised sounds · `js/config.js` server address ·
   `js/i18n.js` + `js/i18n/{en,es,pt,fr,de}.js` the texts in five languages (`RB.t('key', {params})`).
 - `server/worker.js` Cloudflare Worker + one Durable Object (`Hub`, SQLite): 7 public rooms
-  (3 = Teams 2v2, 5 = SNS, 6 = Fast, 7 = Pure), ranking, round stats. `wrangler.jsonc` deploys it
-  and serves the game files (minus `.assetsignore`).
+  (3 = Teams 2v2, 5 = SNS, 6 = Fast, 7 = Pure), ranking, round stats, accounts.
+  `server/auth.js` checks sign-in tokens (Apple, Google, Microsoft); `js/account.js` is the client side.
+  Accounts store only a scrambled key per person: never request or keep emails or names from providers.
+  `wrangler.jsonc` deploys it and serves the game files (minus `.assetsignore`).
 - `tests/unit` game rules (node --test) · `tests/e2e` server + browser tests (Playwright).
 
 ## Commands
