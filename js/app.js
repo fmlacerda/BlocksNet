@@ -99,7 +99,7 @@
             <label>${t('lobby.opponents')}<select id="rb-bots">${[1, 2, 3].map(n => `<option ${n === s.bots ? 'selected' : ''}>${n}</option>`).join('')}</select></label>
             <label>${t('lobby.skill')}<select id="rb-skill">${opt(Object.keys(SKILLS), s.skill, k => t('skill.' + k))}</select></label>
           </div>
-          <div class="rb-row">
+          <div class="rb-row rb-row3">
             <label>${t('lobby.speed')}<select id="rb-speed">${opt(Object.keys(RB.SPEEDS), s.speed, k => t('speed.' + k))}</select></label>
             <label>${t('lobby.startLevel')}<select id="rb-level">${opt(START_LEVELS, s.startLevel)}</select></label>
             <label>${t('lobby.levelUp')}<select id="rb-lpl">${opt(LINES_PER_LEVEL, s.linesPerLevel, n => t('lobby.lines', { n }))}</select></label>

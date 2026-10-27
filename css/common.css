@@ -84,6 +84,9 @@ button { font: inherit; color: inherit; border: 0; background: none; cursor: poi
 }
 .rb-row { display: flex; gap: 8px; }
 .rb-row label { min-width: 0; justify-content: flex-end; }   /* labels that wrap keep the fields lined up */
+/* Small phones: Safari won't shrink a dropdown below its longest option, so three in a row
+   don't fit in every language. Speed gets its own line. */
+@media (max-width: 359px) { .rb-row3 { flex-wrap: wrap; } .rb-row3 label:first-child { flex-basis: 100%; } }
 .rb-panel select { padding: 10px 8px; }
 .rb-panel .rb-check { flex-direction: row; align-items: center; gap: 10px; font-size: 14px; color: var(--text); }
 .rb-panel .rb-check input { width: 20px; height: 20px; accent-color: var(--accent); }
