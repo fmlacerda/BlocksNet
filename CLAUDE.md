@@ -10,7 +10,8 @@ The owner is not a developer: explain outcomes in plain words, and ask before an
 - `js/engine.js` rules (Room, Player, BotBrain, modes) · `js/render.js` canvas drawing ·
   `js/net.js` online play (public rooms over WebSocket, private rooms over PeerJS) ·
   `js/app.js` screens (lobby, rooms, Partyline, stats, summary) · `js/statsimage.js` summary as PNG ·
-  `js/sound.js` synthesised sounds · `js/config.js` server address.
+  `js/sound.js` synthesised sounds · `js/config.js` server address ·
+  `js/i18n.js` + `js/i18n/{en,es,pt,fr,de}.js` the texts in five languages (`RB.t('key', {params})`).
 - `server/worker.js` Cloudflare Worker + one Durable Object (`Hub`, SQLite): 7 public rooms
   (3 = Teams 2v2, 5 = SNS, 6 = Fast, 7 = Pure), ranking, round stats. `wrangler.jsonc` deploys it
   and serves the game files (minus `.assetsignore`).
@@ -37,7 +38,9 @@ The owner is not a developer: explain outcomes in plain words, and ask before an
   (engine `COLORS`, `SPECIAL_INFO`) are part of the game and stay as they are.
 - Never rename the Worker (`blocksnet`): it holds the ranking database. Never store player emails.
   Never commit secrets (use GitHub/Cloudflare secret settings). Never use "Tetris"/"TetriNET" names.
-- Write user-visible text plainly; keep comments short and about why.
+- Write user-visible text plainly; keep comments short and about why. Player-facing text never goes
+  in the code: add a key to all five `js/i18n/*.js` files (unit tests check they match). Server
+  room messages send a `code` + `p` params (texts under `srv.`) next to the English `text`.
 
 ## Testing notes
 - Tests share the 7 rooms, so they run one at a time; each test empties its room at the end.

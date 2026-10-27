@@ -83,7 +83,7 @@ button { font: inherit; color: inherit; border: 0; background: none; cursor: poi
   -webkit-user-select: text; user-select: text;
 }
 .rb-row { display: flex; gap: 8px; }
-.rb-row label { min-width: 0; }
+.rb-row label { min-width: 0; justify-content: flex-end; }   /* labels that wrap keep the fields lined up */
 .rb-panel select { padding: 10px 8px; }
 .rb-panel .rb-check { flex-direction: row; align-items: center; gap: 10px; font-size: 14px; color: var(--text); }
 .rb-panel .rb-check input { width: 20px; height: 20px; accent-color: var(--accent); }
@@ -116,6 +116,9 @@ button { font: inherit; color: inherit; border: 0; background: none; cursor: poi
 .rb-host-row { display: flex; gap: 8px; align-items: flex-end; }
 .rb-host-row label { flex: 0 0 84px; }
 .rb-host-row .rb-btn-primary { flex: 1; }
+.rb-lang { display: flex; align-items: center; justify-content: center; gap: 8px; }
+.rb-panel .rb-lang label { flex: 0 0 auto; flex-direction: row; align-items: center; font-size: 13px; }
+.rb-panel .rb-lang select { width: auto; font-size: 16px; padding: 6px 8px;   /* 16px: iPhones zoom into smaller ones */ }
 .rb-version { text-align: center; font-size: 11px; color: var(--dim); }
 .rb-linkbtn { color: var(--dim); text-decoration: underline; font-size: 11px; padding: 4px; touch-action: manipulation; }
 .rb-room-foot { justify-content: space-between; }
@@ -230,8 +233,8 @@ button { font: inherit; color: inherit; border: 0; background: none; cursor: poi
 .rb-stats p { margin: 4px 2px 0; color: var(--dim); font-size: 9px; }
 .rb-mp-me small { display: block; margin-top: 2px; }
 /* Rooms with a special game mode (SNS, Fast) */
-.rb-rmode { font-size: 10px; color: var(--dim); margin-top: -3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.rb-rmode b { color: var(--ink); background: #3DFFE0; border-radius: 4px; padding: 0 4px; margin-right: 3px; font-weight: 800; }
+.rb-rmode { font-size: 10px; line-height: 1.5; color: var(--dim); margin-top: -3px; }   /* wraps: longer in some languages */
+.rb-rmode b { color: var(--ink); background: #3DFFE0; border-radius: 4px; padding: 0 4px; margin-right: 3px; font-weight: 800; white-space: nowrap; }
 /* Teams room (room 3): team badges and the A/B picker in the Partyline */
 .rb-tm { display: inline-block; min-width: 15px; text-align: center; border-radius: 4px; padding: 0 3px; font-size: 10px; font-weight: 800; color: #fff; line-height: 15px; }
 .rb-tm-A { background: #2f7bff; } .rb-tm-B { background: #e0533d; }
