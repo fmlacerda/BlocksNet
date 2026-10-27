@@ -47,7 +47,10 @@ for (const lang of LANGS) {
     expect(await misfits(p), 'public rooms').toEqual([]);
     await p.click('#rb-mp-back');
 
-    await p.click('#rb-host');                                        // private room screen
+    await p.click('#rb-host');                                        // first time online: the rules
+    await expect(p.locator('#rb-terms')).toBeVisible();
+    expect(await misfits(p), 'online rules').toEqual([]);
+    await p.click('#rb-terms-ok');                                    // then the private room screen
     await expect(p.locator('#rb-on-room')).toBeVisible();
     expect(await misfits(p), 'room screen').toEqual([]);
     await p.click('#rb-leave');
@@ -85,6 +88,7 @@ test('server messages arrive in the player’s language; old apps get English (r
   const p = await openIn(browser, 'es', { width: 393, height: 852 });
   await p.click('#rb-mp-open');
   await p.click('.rb-join[data-room="6"]');
+  await p.click('#rb-terms-ok');                                      // first time online: the rules
   await expect(p.locator('#rb-code-show')).toHaveText('Sala 6');
   await expect(p.locator('#rb-code-label')).toHaveText('Rápida · 30 % más rápida');
   await expect(p.locator('#rb-chat')).toContainText('Bienvenido a la Sala 6');

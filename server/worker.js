@@ -27,8 +27,9 @@
  */
 import { DurableObject } from 'cloudflare:workers';
 import { authConfig, verifySignIn } from './auth.js';
+import { filterChat, badName } from './moderation.js';
 
-const SERVER_VERSION = '2026.10.27e';   // shown on /health, to check which code is deployed
+const SERVER_VERSION = '2026.10.27f';   // shown on /health, to check which code is deployed
 const ROOMS = 7;
 const MAX_PLAYERS = 4;
 const MAX_WATCHERS = 8;
@@ -38,7 +39,11 @@ const PROTO = 1;
 // reloads itself; store apps show an update message). Versions compare as text (YYYY.MM.DDx).
 const MIN_CLIENT_VERSION = '2026.10.12a';
 // Abuse limits, per connection unless noted.
-const LIMITS = { msgBytes: 16384, msgsPerSec: 100, chatPerWindow: 5, chatWindowMs: 10000, socketsPerIp: 12, errorsPerMin: 60, signInsPerMin: 30 };
+const LIMITS = { msgBytes: 16384, msgsPerSec: 100, chatPerWindow: 5, chatWindowMs: 10000, socketsPerIp: 12, errorsPerMin: 60, signInsPerMin: 30, reportsPerHour: 5 };
+// Reports from this many different players within a day mute a player's chat for a day
+// (and replace a nickname reported as offensive).
+const REPORTS_TO_ACT = 3;
+const REPORT_REASONS = ['chat', 'name', 'cheat', 'other'];
 const BOT_NAMES = ['Blockhead', 'LineLord', 'Nukem', 'Gravitas', 'QuakeBot', 'Specialist', 'T-Spin'];
 const SPEEDS = ['relaxed', 'classic', 'fast', 'turbo', 'insane'];
 const GAME_TYPES = ['f', 'lines', 'special', 'dead'];
@@ -139,6 +144,10 @@ export class Hub extends DurableObject {
     // Accounts: a scrambled key per signed-in person (no email, no name) and the player id it plays as.
     this.sql.exec(`CREATE TABLE IF NOT EXISTS accounts (key TEXT PRIMARY KEY, pid TEXT NOT NULL, provider TEXT NOT NULL, created INTEGER NOT NULL)`);
     this.sql.exec(`CREATE INDEX IF NOT EXISTS accounts_pid ON accounts (pid)`);
+    // Player reports (who reported whom, why, when) and chat mutes. Player ids only, no chat text.
+    this.sql.exec(`CREATE TABLE IF NOT EXISTS reports (reported TEXT NOT NULL, reporter TEXT NOT NULL, reason TEXT NOT NULL, ts INTEGER NOT NULL)`);
+    this.sql.exec(`CREATE INDEX IF NOT EXISTS reports_reported ON reports (reported, ts)`);
+    this.sql.exec(`CREATE TABLE IF NOT EXISTS mutes (pid TEXT PRIMARY KEY, until INTEGER NOT NULL)`);
     // The account's nickname: the same on every device, and nobody else's.
     try { this.sql.exec(`ALTER TABLE accounts ADD COLUMN name TEXT NOT NULL DEFAULT ''`); } catch (e) { /* exists */ }
     // All-time stat totals (added later; ALTER fails harmlessly once the column exists).
@@ -148,7 +157,7 @@ export class Hub extends DurableObject {
     }
     // clients = seated players (max 4, incl. late joiners waiting for the next game);
     // watchers = spectators beyond the 4 seats.
-    this.rooms = Array.from({ length: ROOMS }, (_, i) => ({ n: i + 1, mode: ROOM_MODES[i] || 'normal', clients: [], watchers: [], hostId: null, game: null }));
+    this.rooms = Array.from({ length: ROOMS }, (_, i) => ({ n: i + 1, mode: ROOM_MODES[i] || 'normal', clients: [], watchers: [], hostId: null, game: null, chatLog: [] }));
     this.nextId = 1;
     this.ipCount = new Map();
     this.uniqueRankingNames();
@@ -225,7 +234,7 @@ export class Hub extends DurableObject {
 
   // The account's nickname (made unique), also on its ranking line. Returns the name it got.
   setAccountName(pid, name) {
-    const n = this.uniqueName(name, pid);
+    const n = this.uniqueName(badName(name) ? 'Player' : name, pid);
     this.sql.exec(`UPDATE accounts SET name = ? WHERE pid = ?`, n, pid);
     this.sql.exec(`UPDATE players SET name = ? WHERE pid = ?`, n, pid);
     for (const r of this.rooms) for (const c of r.clients.concat(r.watchers)) if (c.pid === pid) c.name = n;
@@ -256,7 +265,45 @@ export class Hub extends DurableObject {
     this.sql.exec(`DELETE FROM accounts WHERE pid = ?`, pid);
     this.sql.exec(`DELETE FROM players WHERE pid = ?`, pid);
     this.sql.exec(`DELETE FROM results WHERE pid = ?`, pid);
+    this.sql.exec(`DELETE FROM reports WHERE reporter = ?`, pid);
     return { deleted: true };
+  }
+
+  // ------------------------------------------------------------ reports
+  mutedUntil(pid) {
+    const r = this.sql.exec(`SELECT until FROM mutes WHERE pid = ?`, pid).toArray()[0];
+    return r ? r.until : 0;
+  }
+  // A player reports another one in the same room. The report goes to the Worker log with the
+  // room's recent chat (for the owner to review); several reporters in a day act automatically.
+  report(room, c, m) {
+    const target = room.clients.concat(room.watchers).find(x => x !== c && x.name === cleanName(m.name));
+    if (!target || target.pid === c.pid) return;
+    const now = Date.now(), DAY = 24 * 3600 * 1000;
+    this.sql.exec(`DELETE FROM reports WHERE ts < ?`, now - 30 * DAY);   // reports are kept 30 days
+    const recent = this.sql.exec(`SELECT COUNT(*) AS n FROM reports WHERE reporter = ? AND ts > ?`, c.pid, now - 3600 * 1000).one().n;
+    const again = this.sql.exec(`SELECT 1 FROM reports WHERE reporter = ? AND reported = ? AND ts > ?`, c.pid, target.pid, now - DAY).toArray().length;
+    this.send(c, { t: 'chat', system: true, text: `Thanks, ${target.name} was reported.`, code: 'reported', p: { name: target.name } });
+    if (recent >= LIMITS.reportsPerHour || again) return;
+    const reason = REPORT_REASONS.includes(m.reason) ? m.reason : 'other';
+    this.sql.exec(`INSERT INTO reports (reported, reporter, reason, ts) VALUES (?, ?, ?, ?)`, target.pid, c.pid, reason, now);
+    console.warn('player report', JSON.stringify({ room: room.n, reported: target.name, reason, by: c.name, chat: room.chatLog.slice(-20) }));
+    const by = reason => this.sql.exec(`SELECT COUNT(DISTINCT reporter) AS n FROM reports WHERE reported = ? AND ts > ?${reason ? ' AND reason = ?' : ''}`,
+      ...[target.pid, now - DAY].concat(reason ? [reason] : [])).one().n;
+    if (by() >= REPORTS_TO_ACT && this.mutedUntil(target.pid) < now) {
+      this.sql.exec(`INSERT OR REPLACE INTO mutes (pid, until) VALUES (?, ?)`, target.pid, now + DAY);
+      console.warn('player muted', JSON.stringify({ name: target.name, until: new Date(now + DAY).toISOString() }));
+    }
+    // An offensive nickname, reported by several players: replaced with a plain one.
+    if (reason === 'name' && by('name') >= REPORTS_TO_ACT) {
+      const was = target.name;
+      const acct = this.sql.exec(`SELECT 1 FROM accounts WHERE pid = ?`, target.pid).toArray().length;
+      const n = acct ? this.setAccountName(target.pid, 'Player') : this.uniqueName('Player', target.pid);
+      for (const r of this.rooms) for (const x of r.clients.concat(r.watchers)) if (x.pid === target.pid) { x.name = n; this.send(x, { t: 'rename', name: n }); }
+      this.sql.exec(`UPDATE players SET name = ? WHERE pid = ?`, n, target.pid);
+      console.warn('nickname replaced', JSON.stringify({ was, now: n }));
+      this.broadcastLobby(room);
+    }
   }
 
   // ------------------------------------------------------------ lobby data
@@ -345,7 +392,7 @@ export class Hub extends DurableObject {
       c.did = cleanPid(m.did);
       // Signed in: the account's nickname. Otherwise the chosen one, unless someone else has it.
       const acctName = this.sql.exec(`SELECT name FROM accounts WHERE pid = ?`, c.pid).toArray()[0];
-      c.name = acctName && acctName.name ? acctName.name : this.uniqueName(c.name, c.pid);
+      c.name = acctName && acctName.name ? acctName.name : this.uniqueName(badName(c.name) ? 'Player' : c.name, c.pid);
       // Same player coming back (e.g. after a dropped connection): replace the old link.
       // Same player back on a new link (old link not noticed as dead yet, or dropped within
       // the grace period): hand their seat and players in the running game to the new link.
@@ -391,9 +438,14 @@ export class Hub extends DurableObject {
           return;
         }
         c.chats.push(now);
-        this.toRoom(room, { t: 'chat', name: c.name, text }, c);
+        if (this.mutedUntil(c.pid) > now) { this.send(c, { t: 'chat', system: true, text: 'Several players reported you, so your chat is paused for now.', code: 'muted' }); return; }
+        const clean = filterChat(text);
+        room.chatLog.push(`${c.name}: ${clean}`);
+        if (room.chatLog.length > 30) room.chatLog.shift();
+        this.toRoom(room, { t: 'chat', name: c.name, text: clean }, c);
         return;
       }
+      case 'report': return this.report(room, c, m);
       case 'start': return this.start(c, m);
       case 'team': {
         // Switch team between games, if that team has room.

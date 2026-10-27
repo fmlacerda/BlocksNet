@@ -62,6 +62,8 @@ async function emptyRoom(n) {
 // Opens the game with a nickname, sound/fullscreen out of the way, and collects page errors.
 async function openGame(browser, name, contextOpts = {}) {
   const context = await browser.newContext({ viewport: { width: 393, height: 852 }, ...contextOpts });
+  // The one-time online rules are already accepted (tests of the rules sheet use their own pages).
+  await context.addInitScript(() => { try { if (!localStorage.getItem('rb.terms')) localStorage.setItem('rb.terms', JSON.stringify('2026-10')); } catch (e) { /* no storage */ } });
   const page = await context.newPage();
   page.errors = [];
   page.on('pageerror', e => page.errors.push(e.message));

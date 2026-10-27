@@ -116,13 +116,15 @@
           <p class="rb-status error" id="rb-lobby-msg"></p>
           <button class="rb-btn-primary" id="rb-start">${t('lobby.play')}</button>
           ${RB.net ? `<div class="rb-divider"><span>${t('lobby.or')}</span></div>
-          ${RB.net.serverURL() ? `<button class="rb-btn-secondary rb-mp-btn" id="rb-mp-open" type="button">${t('lobby.public')}</button>` : ''}
+          ${RB.net.serverURL() ? `<button class="rb-btn-primary rb-quick" id="rb-quick" type="button">&#9889; ${t('quick.btn')}</button>
+          <button class="rb-btn-secondary rb-mp-btn" id="rb-mp-open" type="button">${t('lobby.public')}</button>` : ''}
           <div class="rb-row rb-private-row">
             <button class="rb-btn-secondary" id="rb-host">${t(RB.net.serverURL() ? 'lobby.private' : 'lobby.host')}</button>
             <button class="rb-btn-secondary" id="rb-join-open">${t(RB.net.serverURL() ? 'lobby.joinCode' : 'lobby.join')}</button>
           </div>` : ''}
           <div class="rb-lang"><label for="rb-lang">&#127760; ${t('lobby.language')}</label><select id="rb-lang">${Object.entries(RB.LANGS).map(([c, n]) => `<option value="${c}" ${c === RB.lang ? 'selected' : ''}>${n}</option>`).join('')}</select></div>
-          <p class="rb-version">v${RB.VERSION}${RB.net ? ` · <button class="rb-linkbtn" id="rb-diag-open" type="button">${t('lobby.diag')}</button>` : ''}</p>
+          <p class="rb-version">v${RB.VERSION}${RB.net ? ` · <button class="rb-linkbtn" id="rb-diag-open" type="button">${t('lobby.diag')}</button>` : ''}
+            · <a class="rb-linkbtn" href="privacy.html" target="_blank">${t('lobby.privacy')}</a> · <a class="rb-linkbtn" href="terms.html" target="_blank">${t('lobby.terms')}</a></p>
         </div>
       </div>
       <div class="rb-overlay hidden" id="rb-mp">
@@ -207,6 +209,27 @@
           <p class="rb-hint hidden" id="rb-end-wait">${t('on.waitNext')}</p>
           <button class="rb-btn-primary" id="rb-again">${t('end.again')}</button>
           <button class="rb-btn-ghost" id="rb-lobby-btn">${t('end.settings')}</button>
+        </div>
+      </div>
+      <div class="rb-overlay hidden" id="rb-terms">
+        <div class="rb-panel">
+          <div class="rb-sub">${t('terms.title')}</div>
+          <ul class="rb-terms-list"><li>${t('terms.kind')}</li><li>${t('terms.filter')}</li><li>${t('terms.report')}</li></ul>
+          <p class="rb-hint">${t('terms.agree')}</p>
+          <div class="rb-row">
+            <button class="rb-btn-ghost" id="rb-terms-no" type="button">${t('terms.no')}</button>
+            <button class="rb-btn-primary" id="rb-terms-ok" type="button">${t('terms.ok')}</button>
+          </div>
+        </div>
+      </div>
+      <div class="rb-overlay hidden" id="rb-psheet">
+        <div class="rb-panel rb-psheet">
+          <div class="rb-sub" id="rb-ps-name"></div>
+          <button class="rb-btn-secondary" data-report="chat" type="button">${t('mod.reportChat')}</button>
+          <button class="rb-btn-secondary" data-report="name" type="button">${t('mod.reportName')}</button>
+          <button class="rb-btn-secondary" data-report="cheat" type="button">${t('mod.reportCheat')}</button>
+          <button class="rb-btn-secondary" id="rb-ps-block" type="button"></button>
+          <button class="rb-btn-ghost" id="rb-ps-close" type="button">${t('close')}</button>
         </div>
       </div>`;
   }
@@ -316,6 +339,7 @@
     }
 
     function leaveOnline(message) {
+      stopQuick(); quick = null;
       if (session) { const s = session; session = null; s.close(); }
       room.net = null;
       room.authority = true;
@@ -522,7 +546,8 @@
         $('rb-code-show').textContent = l.code || s.code;
         if (s.public) { const md = RB.MODES[l.mode]; $('rb-code-label').textContent = md && md.desc ? `${t('mode.' + l.mode)} · ${t('mode.' + l.mode + '.desc')}` : t('on.publicRoom'); }
         const teamTag = t => (t ? `<span class="rb-tm rb-tm-${t}">${t}</span> ` : '');
-        $('rb-plist').innerHTML = l.players.map(p => `<li>${teamTag(p.team)}${p.name}${devIcon(p.dev)}${p.host ? ` <em>${t('on.host')}</em>` : ''}</li>`).join('')
+        // Tap another player to report or block them.
+        $('rb-plist').innerHTML = l.players.map(p => `<li${p.me ? '' : ` data-name="${esc(p.name)}" class="rb-other${isBlocked(p.name) ? ' blocked' : ''}"`}>${teamTag(p.team)}${esc(p.name)}${devIcon(p.dev)}${p.host ? ` <em>${t('on.host')}</em>` : ''}</li>`).join('')
           + (l.watchers || []).map(n => `<li class="watcher">&#128065; ${n}</li>`).join('');
         // Teams room: pick team A or B (between games; 2 players per team).
         const teams = l.mode === 'teams', mine = l.players.find(p => p.me);
@@ -540,8 +565,11 @@
         const fill = $('rb-fill');
         [...fill.options].forEach(o => { o.disabled = +o.value > free; });
         if (+fill.value > free) fill.value = String(free);
+        s.lastPlayers = l.players.length;
+        quickCountdown(s, l);
       });
       s.on('start', msg => {
+        stopQuick(); quick = null;
         if (session !== s) return;
         if (!msg.players.some(p => p.owner === msg.me)) { enterWatch(s, msg, false); return; }
         setWatching(false);
@@ -600,9 +628,11 @@
       s.on('renamed', r => {
         $('rb-name').value = r.name;
         readSettings();
-        if (!(RB.account && RB.account.current())) roomChat(t('on.nameTaken', { was: r.was, name: r.name }), 'system');
+        if (r.reported) roomChat(t('mod.renamed', { name: r.name }), 'system');
+        else if (!(RB.account && RB.account.current())) roomChat(t('on.nameTaken', { was: r.was, name: r.name }), 'system');
       });
       s.on('chat', c => {
+        if (!c.system && isBlocked(c.name)) return;
         const text = c.system ? c.text : `<${c.name}> ${c.text}`;
         room.log(text, c.system ? 'system' : 'chat');
         roomChat(text, c.system ? 'system' : 'chat');
@@ -632,9 +662,10 @@
         ? `<p>${t('acct.signedIn', { provider: t('acct.' + cur.provider) })}</p>` +
           `<div class="rb-acct-row"><button class="rb-linkbtn" data-act="signout" type="button">${t('acct.signOut')}</button>` +
           `<button class="rb-linkbtn" data-act="delete" type="button">${t('acct.delete')}</button></div>`
-        : `<p class="rb-hint">${t('acct.why')}</p><div class="rb-acct-btns">${list.map(p =>
-          `<button class="rb-sso rb-sso-${p}" data-provider="${p}" type="button">${SSO_MARK[p]}<span>${t('acct.continue.' + p)}</span></button>`).join('')}</div>`;
-      show('rb-acct', !!(cur || list.length));
+        : (list.length ? `<p class="rb-hint">${t('acct.why')}</p><div class="rb-acct-btns">${list.map(p =>
+          `<button class="rb-sso rb-sso-${p}" data-provider="${p}" type="button">${SSO_MARK[p]}<span>${t('acct.continue.' + p)}</span></button>`).join('')}</div>` : '') +
+          `<div class="rb-acct-row"><button class="rb-linkbtn" data-act="deleteGuest" type="button">${t('acct.deleteGuest')}</button></div>`;
+      show('rb-acct', true);
     }
     async function refreshMP() {
       try {
@@ -672,7 +703,8 @@
         `<li class="${p.you ? 'you' : ''}"><span class="n">${i + 1}</span><span class="who">${esc(p.name)}${devIcons(p.devices | 0)}</span><span class="w">${p.wins}<small>${t('mp.games', { n: p.games })}</small></span></li>`).join('')
         : `<li class="empty">${t('mp.noRank')}</li>`;
     }
-    function joinPublic(n, watch = false) {
+    function joinPublic(n, watch = false) { withTerms(() => joinPublicNow(n, watch)); }
+    function joinPublicNow(n, watch) {
       const { name } = readSettings();
       if (app.fullscreen) enterFullscreen(config.orientation);
       clearInterval(mpTimer);
@@ -712,8 +744,62 @@
     app.follow = p => { if (app.watching && p) { app.me = p; config.onSetup && config.onSetup(app); } };
     app.leaveWatch = () => { const pub = session && session.public; leaveOnline(); if (pub) openMP(); };
 
+    // ---------------------------------------------------------- terms, reports, blocking
+    // Online play starts with a one-time agreement to the rules (app stores require it for chat).
+    const TERMS = '2026-10';
+    let termsNext = null;
+    function withTerms(go) {
+      if (store.get('terms') === TERMS) { go(); return; }
+      termsNext = go;
+      show('rb-terms', true);
+    }
+    // Blocked players' chat is hidden on this device (nicknames are unique, so the name is enough).
+    const blocked = () => store.get('blocked', []);
+    const isBlocked = name => blocked().includes(name);
+    let sheetName = '';
+    function openPlayerSheet(name) {
+      sheetName = name;
+      $('rb-ps-name').textContent = name;
+      $('rb-ps-block').textContent = t(isBlocked(name) ? 'mod.unblock' : 'mod.block');
+      // Reports go to the server, so only public rooms have them.
+      $('rb-psheet').querySelectorAll('[data-report]').forEach(b => b.classList.toggle('hidden', !(session && session.public)));
+      show('rb-psheet', true);
+    }
+
+    // ---------------------------------------------------------- Play now
+    // Joins the public room most likely to have a game soon; alone in it, the game starts with
+    // bots after a short countdown (anyone joining meanwhile plays too).
+    let quick = null;
+    const QUICK_S = 15;
+    function stopQuick() { if (quick) { clearInterval(quick.timer); quick = null; status(''); } }
+    async function playNow() {
+      let d;
+      try { d = await RB.net.fetchLobby(); } catch (e) { $('rb-lobby-msg').textContent = t('mp.cantLoad', { err: e.message }); return; }
+      const max = d.maxPlayers || MAX_PLAYERS;
+      const free = d.rooms.filter(r => r.state !== 'playing' && r.players.length < max);
+      const pick = free.filter(r => r.mode === 'normal').sort((a, b) => b.players.length - a.players.length)[0] || free[0];
+      if (!pick) { openMP(); return; }
+      stopQuick();
+      quick = { room: pick.n, timer: null };
+      joinPublicNow(pick.n, false);
+    }
+    function quickCountdown(s, l) {
+      if (!quick || quick.timer || session !== s || !s.isHost || room.running || quick.room !== s.room) return;
+      let left = QUICK_S;
+      status(t('quick.countdown', { n: left }));
+      quick.timer = setInterval(() => {
+        if (session !== s || room.running) { stopQuick(); return; }
+        if (--left > 0) { status(t('quick.countdown', { n: left })); return; }
+        stopQuick();
+        if (!s.isHost) return;
+        $('rb-fill').value = String(Math.max(0, MAX_PLAYERS - s.lastPlayers));
+        hostStart();
+      }, 1000);
+    }
+
     function hostStart() {
       if (!session || !session.isHost) return;   // only the host can start a game
+      stopQuick();
       const { skill, game } = readSettings();
       session.startGame(game, +$('rb-fill').value, SKILLS[skill]);
     }
@@ -721,22 +807,46 @@
     if (RB.net && !demo) {
       const clearMsg = () => { $('rb-lobby-msg').textContent = ''; };
       ['rb-host', 'rb-join-open', 'rb-start'].forEach(id => $(id).addEventListener('click', clearMsg));
-      $('rb-host').addEventListener('click', () => {
+      $('rb-host').addEventListener('click', () => withTerms(() => {
         const { name } = readSettings();
         if (app.fullscreen) enterFullscreen(config.orientation);
         $('rb-plist').innerHTML = '';
         $('rb-code-show').textContent = '·····';
         openOnline('host');
         newSession().host(name);
-      });
+      }));
       const openJoin = () => { status(''); $('rb-join-name').value = $('rb-name').value; openOnline('join'); };
       $('rb-join-open').addEventListener('click', () => { openJoin(); $('rb-code').focus(); });
-      $('rb-join').addEventListener('click', () => {
+      $('rb-join').addEventListener('click', () => withTerms(() => {
         $('rb-name').value = $('rb-join-name').value;
         const { name } = readSettings();
         if (app.fullscreen) enterFullscreen(config.orientation);
         $('rb-plist').innerHTML = '';
         newSession().join($('rb-code').value, name);
+      }));
+      $('rb-terms-ok').addEventListener('click', () => {
+        store.set('terms', TERMS);
+        show('rb-terms', false);
+        const go = termsNext; termsNext = null;
+        if (go) go();
+      });
+      $('rb-terms-no').addEventListener('click', () => { termsNext = null; show('rb-terms', false); });
+      if ($('rb-quick')) $('rb-quick').addEventListener('click', () => { $('rb-lobby-msg').textContent = ''; readSettings(); withTerms(playNow); });
+      $('rb-plist').addEventListener('click', e => { const li = e.target.closest('li[data-name]'); if (li) openPlayerSheet(li.dataset.name); });
+      $('rb-psheet').addEventListener('click', e => {
+        const b = e.target.closest('button');
+        if (!b) return;
+        if (b.dataset.report && session && session.report) {
+          session.report(sheetName, b.dataset.report);
+        } else if (b.id === 'rb-ps-block') {
+          const list = blocked().filter(n => n !== sheetName);
+          const block = !isBlocked(sheetName);
+          if (block) list.unshift(sheetName);
+          store.set('blocked', list.slice(0, 200));
+          roomChat(t(block ? 'mod.blocked' : 'mod.unblocked', { name: sheetName }), 'system');
+          document.querySelectorAll('#rb-plist li[data-name]').forEach(li => li.classList.toggle('blocked', isBlocked(li.dataset.name)));
+        }
+        show('rb-psheet', false);
       });
       $('rb-code').addEventListener('input', e => { e.target.value = RB.net.cleanCode(e.target.value); });
       $('rb-code').addEventListener('keydown', e => { if (e.key === 'Enter') $('rb-join').click(); });
@@ -768,6 +878,10 @@
           if (!b) return;
           if (b.dataset.provider) { readSettings(); RB.account.start(b.dataset.provider); return; }
           if (b.dataset.act === 'signout') { RB.account.signOut(); openMP(t('acct.signedOut'), true); return; }
+          if (b.dataset.act === 'deleteGuest' && confirm(t('acct.confirmDeleteGuest'))) {
+            try { await RB.account.remove(); openMP(t('acct.deletedGuest'), true); }
+            catch (err) { openMP(t('acct.err.deleteFailed')); }
+          }
           if (b.dataset.act === 'delete' && confirm(t('acct.confirmDelete'))) {
             try { await RB.account.remove(); openMP(t('acct.deleted'), true); }
             catch (err) { openMP(t('acct.err.deleteFailed')); }

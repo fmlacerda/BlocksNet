@@ -311,3 +311,13 @@ button { font: inherit; color: inherit; border: 0; background: none; cursor: poi
 .rb-acct-row { display: flex; justify-content: center; gap: 12px; }
 #rb-mp-msg { word-break: normal; }
 #rb-mp-msg:not(.error) { color: var(--accent); }
+
+/* Play now, the online rules sheet, and the report/block sheet for a player. */
+.rb-quick { background: var(--pink); color: #fff; }
+#rb-terms, #rb-psheet { z-index: 80; }
+.rb-terms-list { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 8px; font-size: 14px; line-height: 1.4; color: var(--soft); }
+.rb-panel a { color: var(--accent); }
+.rb-psheet { gap: 8px; }
+.rb-psheet .rb-sub { font-size: 15px; letter-spacing: .04em; text-transform: none; }
+#rb-plist li.rb-other { cursor: pointer; }
+#rb-plist li.blocked { opacity: .55; text-decoration: line-through; }

@@ -10,7 +10,7 @@ test('site: game files are served, server code and config are not', async () => 
   expect(await get('/')).toBe(200);
   expect(await get('/js/engine.js')).toBe(200);
   expect(await get('/version.json')).toBe(200);
-  for (const hidden of ['/server/worker.js', '/wrangler.jsonc', '/README.md', '/.git/HEAD', '/package.json', '/tests/e2e/helpers.js', '/CLAUDE.md'])
+  for (const hidden of ['/server/worker.js', '/wrangler.jsonc', '/README.md', '/.git/HEAD', '/package.json', '/tests/e2e/helpers.js', '/CLAUDE.md', '/tools/make-legal.py'])
     expect(await get(hidden), hidden).toBe(404);
   const h = await (await fetch(BASE + '/health')).json();
   const v = JSON.parse(await (await fetch(BASE + '/version.json')).text()).version;
