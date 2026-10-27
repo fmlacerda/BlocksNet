@@ -13,7 +13,8 @@ concurrency:
 
 jobs:
   test:
-    runs-on: ubuntu-latest
+    # Pinned: Playwright 1.56.1 supports Ubuntu 24.04, not the newer default image.
+    runs-on: ubuntu-24.04
     timeout-minutes: 25
     env:
       CI: '1'
