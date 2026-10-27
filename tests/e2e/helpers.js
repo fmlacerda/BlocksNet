@@ -44,7 +44,7 @@ async function client(room, name, opts = {}) {
     for (const w of waiters.slice()) if (w.t === m.t && w.test(m)) { waiters.splice(waiters.indexOf(w), 1); w.resolve(m); }
   };
   await new Promise((res, rej) => { ws.onopen = res; ws.onerror = () => rej(new Error('ws error')); });
-  c.send({ t: 'hello', v: PROTO, name, pid: opts.pid || 'pid' + name.toLowerCase(), ver: 'ver' in opts ? opts.ver : VERSION, dev: opts.dev, watch: opts.watch });
+  c.send({ t: 'hello', v: PROTO, name, pid: opts.pid || 'pid' + name.toLowerCase(), did: opts.did, ver: 'ver' in opts ? opts.ver : VERSION, dev: opts.dev, watch: opts.watch });
   await c.waitFor(opts.expectReject ? 'reject' : 'welcome');
   return c;
 }

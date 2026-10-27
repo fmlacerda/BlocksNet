@@ -269,4 +269,10 @@
   'acct.err.expired': 'La connexion a pris trop de temps ou a commencé dans un autre onglet. Réessaie.',
   'acct.err.failed': 'La connexion n’a pas marché. Réessaie.',
   'acct.err.deleteFailed': 'Impossible de supprimer le compte. Vérifie ta connexion et réessaie.',
+
+  // nicknames
+  'on.nameTaken': '« {was} » est déjà pris, tu joues donc en tant que {name}. Connecte-toi pour qu’un pseudo soit à toi.',
+  'acct.nameTaken': '« {was} » est déjà pris, ton pseudo est donc {name}.',
+  'acct.err.renameFailed': 'Impossible d’enregistrer ton pseudo. Vérifie ta connexion et réessaie.',
+  'srv.elsewhere': 'Tu es déjà dans ce salon sur un autre appareil.',
 };

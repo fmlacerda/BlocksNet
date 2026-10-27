@@ -269,4 +269,10 @@
   'acct.err.expired': 'Die Anmeldung hat zu lange gedauert oder wurde in einem anderen Tab begonnen. Bitte versuch es nochmal.',
   'acct.err.failed': 'Die Anmeldung hat nicht geklappt. Bitte versuch es nochmal.',
   'acct.err.deleteFailed': 'Das Konto konnte nicht gelöscht werden. Prüfe deine Verbindung und versuch es nochmal.',
+
+  // nicknames
+  'on.nameTaken': '„{was}“ ist schon vergeben, also spielst du als {name}. Melde dich an, damit ein Spitzname dir gehört.',
+  'acct.nameTaken': '„{was}“ ist schon vergeben, also ist dein Spitzname {name}.',
+  'acct.err.renameFailed': 'Dein Spitzname konnte nicht gespeichert werden. Prüfe deine Verbindung und versuch es nochmal.',
+  'srv.elsewhere': 'Du bist schon auf einem anderen Gerät in diesem Raum.',
 };

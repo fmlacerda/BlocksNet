@@ -20,6 +20,13 @@
   const get = (k, store = localStorage) => { try { return JSON.parse(store.getItem(k) || 'null'); } catch (e) { return null; } };
   const set = (k, v, store = localStorage) => { try { if (v == null) store.removeItem(k); else store.setItem(k, JSON.stringify(v)); } catch (e) { /* storage off */ } };
   const setPid = pid => { try { localStorage.setItem('rb.pid', pid); } catch (e) { /* storage off */ } };
+  // The nickname lives in the lobby settings (and its field, when the lobby is on screen).
+  const nickname = () => (get('rb.settings') || {}).name || '';
+  const setNickname = name => {
+    set('rb.settings', Object.assign({}, get('rb.settings'), { name }));
+    const f = document.getElementById('rb-name');
+    if (f) f.value = name;
+  };
   const post = async (path, body) => {
     const r = await fetch(RB.net.serverURL() + path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
     const d = await r.json().catch(() => ({}));
@@ -56,12 +63,22 @@
       if (!pending || h.get('state') !== pending.state) return { error: 'expired' };
       if (h.has('error')) return { error: h.get('error') === 'access_denied' || h.get('error') === 'user_cancelled_authorize' ? 'cancelled' : 'failed' };
       try {
-        const r = await post('/auth/signin', { provider: pending.provider, idToken: h.get('id_token'), nonce: pending.nonce, pid: RB.net.playerId() });
+        const r = await post('/auth/signin', { provider: pending.provider, idToken: h.get('id_token'), nonce: pending.nonce, pid: RB.net.playerId(), name: nickname() });
         setPid(r.pid);
+        if (r.name) setNickname(r.name);
         set('rb.account', { provider: pending.provider });
         return { provider: pending.provider, created: r.created };
       } catch (e) { return { error: 'failed' }; }
     },
+    // Signed in: a new nickname is the account's, on every device. Resolves to the name it got
+    // (a numbered variant when someone else has it).
+    async rename(name) {
+      const r = await post('/account/name', { pid: RB.net.playerId(), name });
+      setNickname(r.name);
+      return r.name;
+    },
+    // Another device changed the account's nickname: take it here too.
+    adopt(name) { if (name && name !== nickname()) setNickname(name); },
     // This device goes back to being a guest, with a fresh player id.
     signOut() {
       set('rb.account', null);

@@ -60,6 +60,8 @@ Short retro sound effects are generated in the browser (Web Audio), so there are
 
 Players can stay guests, or sign in with **Apple, Google or Microsoft (Hotmail, Outlook)** on the Multiplayer screen so that every device of theirs shares one line in the ranking (their guest results from each device are added in). The providers are asked for no email, and the server stores none: only a scrambled key per person (`server/auth.js` checks each provider's signed ID token). Players can sign out (the device becomes a guest again) or delete their account, which removes it and all its results.
 
+**Nicknames are unique** in the ranking and among everyone online (case ignored). A signed-in player's nickname belongs to the account: it is the same on every device, and changing it in the lobby changes it everywhere. A guest who picks a nickname someone else has plays as a numbered variant ("Ana" → "Ana2") and is told so. One account on two devices in the same room is refused ("already in this room on another device") instead of one device pushing the other out.
+
 Each provider needs a one-time registration whose public client id goes into `vars` in `wrangler.jsonc` (`APPLE_CLIENT_IDS`, `GOOGLE_CLIENT_ID`, `MICROSOFT_CLIENT_ID`); a provider without one shows no button. The return addresses to register are `https://rowbusters.com/` and `https://blocksnet.fmlacerda.workers.dev/`. Tests use a throwaway test provider whose keys exist only on the local test server.
 
 ## Languages

@@ -270,4 +270,10 @@
   'acct.err.expired': 'That sign-in took too long or started in another tab. Please try again.',
   'acct.err.failed': 'Sign-in didn’t work. Please try again.',
   'acct.err.deleteFailed': 'Couldn’t delete the account. Check your connection and try again.',
+
+  // nicknames
+  'on.nameTaken': '“{was}” is already taken, so you play as {name}. Sign in to make a nickname yours.',
+  'acct.nameTaken': '“{was}” is taken, so your nickname is {name}.',
+  'acct.err.renameFailed': 'Couldn’t save your nickname. Check your connection and try again.',
+  'srv.elsewhere': 'You are already in this room on another device.',
 };

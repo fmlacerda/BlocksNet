@@ -269,4 +269,10 @@
   'acct.err.expired': 'O login demorou demais ou começou em outra aba. Tente de novo.',
   'acct.err.failed': 'Não foi possível entrar. Tente de novo.',
   'acct.err.deleteFailed': 'Não foi possível excluir a conta. Verifique sua conexão e tente de novo.',
+
+  // nicknames
+  'on.nameTaken': '“{was}” já está em uso, então você joga como {name}. Entre na sua conta para que um apelido seja só seu.',
+  'acct.nameTaken': '“{was}” já está em uso, então seu apelido é {name}.',
+  'acct.err.renameFailed': 'Não foi possível salvar seu apelido. Verifique sua conexão e tente de novo.',
+  'srv.elsewhere': 'Você já está nesta sala em outro dispositivo.',
 };

@@ -638,6 +638,14 @@
     const u = params.get('server') || (window.RB_CONFIG && window.RB_CONFIG.server) || '';
     return u.replace(/\/+$/, '');
   }
+  // One per device (unlike the player id, which a signed-in account shares between devices).
+  function deviceId() {
+    try {
+      let id = localStorage.getItem('rb.did');
+      if (!id) { id = rid() + rid(); localStorage.setItem('rb.did', id); }
+      return id;
+    } catch (e) { return ''; }
+  }
   function playerId() {
     try {
       let id = localStorage.getItem('rb.pid');
@@ -722,7 +730,7 @@
         this.ws = ws;
         this.rx = Date.now();
         this.conn = { send: m => { try { if (ws.readyState === 1) ws.send(JSON.stringify(m)); } catch (e) { /* closing */ } }, close: () => { try { ws.close(); } catch (e) { /* ignore */ } ended_(1000, 'closed by this device'); } };
-        this.conn.send({ t: 'hello', v: PROTO, name: this.name, pid: this.pid, ver: RB.VERSION, dev: deviceKind(), watch: this.watch && !this.welcomed });
+        this.conn.send({ t: 'hello', v: PROTO, name: this.name, pid: this.pid, did: deviceId(), ver: RB.VERSION, dev: deviceKind(), watch: this.watch && !this.welcomed });
         this.startHeartbeat();
       };
       ws.onmessage = e => {
@@ -775,6 +783,8 @@
           const first = !this.welcomed;
           this.welcomed = true;
           this.emit('status', '');
+          // The server decides the nickname: the account's, or a variant if this one is taken.
+          if (m.name && cleanName(m.name) !== this.name) { const was = this.name; this.name = cleanName(m.name); this.emit('renamed', { name: this.name, was }); }
           note(`server: in ${this.code}${this.isHost ? ' as host' : ''}`);
           if (first) this.emit('ready', this.code);
           if (this.reconnecting) { this.reconnecting = null; note(`server: ${m.resumed ? 'seat kept – game continues' : 'back in the room'}`); this.emit('reconnected', { resumed: !!m.resumed }); }

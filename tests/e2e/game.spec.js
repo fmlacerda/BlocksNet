@@ -137,13 +137,13 @@ test('joining during a game: watch it, then play the next one (room 2)', async (
 });
 
 test('knocked out during a connection blip: the game still ends (room 2)', async ({ browser }) => {
-  const a = await openGame(browser, 'Ari'), b = await openGame(browser, 'Bel');
+  const a = await openGame(browser, 'Kip'), b = await openGame(browser, 'Lev');   // names of their own: nicknames are unique
   await joinPublicRoom(a, 2); await joinPublicRoom(b, 2);
   await hostStart(a, 0, [b]);
   await b.evaluate(() => RB.current.session().ws.close(4001));     // connection drops…
   await knockOut(b);                                                // …just as Bel is out
   await gameOver(a, b);
-  await expect(a.locator('#rb-chat')).toContainText('Ari wins!');
+  await expect(a.locator('#rb-chat')).toContainText('Kip wins!');
   for (const p of [a, b]) { expect(p.errors).toEqual([]); await p.context().close(); }
   await emptyRoom(2);
 });

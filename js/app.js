@@ -256,6 +256,15 @@
     }
 
     $('rb-start').addEventListener('click', () => { setup(); start(); });
+    // Signed in: the nickname belongs to the account, so a change goes to the server (which keeps it unique).
+    $('rb-name').addEventListener('change', async () => {
+      if (!RB.account || !RB.account.current()) return;
+      const want = readSettings().name;
+      try {
+        const got = await RB.account.rename(want);
+        $('rb-lobby-msg').textContent = got === want ? '' : t('acct.nameTaken', { was: want, name: got });
+      } catch (e) { $('rb-lobby-msg').textContent = t('acct.err.renameFailed'); }
+    });
     // A new language rebuilds every screen: simplest done by reloading (only possible in the lobby).
     $('rb-lang').addEventListener('change', e => {
       readSettings();
@@ -587,6 +596,12 @@
         roomChat(t('on.reconnectedWait'), 'system');
       });
       s.on('stats', st => { if (session === s) roomStats(st); });
+      // The server gave this player another nickname (taken by someone else, or the account's own).
+      s.on('renamed', r => {
+        $('rb-name').value = r.name;
+        readSettings();
+        if (!(RB.account && RB.account.current())) roomChat(t('on.nameTaken', { was: r.was, name: r.name }), 'system');
+      });
       s.on('chat', c => {
         const text = c.system ? c.text : `<${c.name}> ${c.text}`;
         room.log(text, c.system ? 'system' : 'chat');
@@ -626,6 +641,8 @@
         mpData = await RB.net.fetchLobby();
         // Account deleted from another device: this one is a guest again.
         if (mpData.account === null && RB.account && RB.account.current()) { try { localStorage.removeItem('rb.account'); } catch (e) { /* storage off */ } renderAccount(); }
+        // Nickname changed on another device of this account.
+        if (mpData.accountName && RB.account && RB.account.current()) RB.account.adopt(mpData.accountName);
         renderMP();
       }
       catch (e) { $('rb-mp-me').textContent = t('mp.cantLoad', { err: e.message }); }
