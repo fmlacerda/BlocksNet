@@ -28,7 +28,7 @@
   "vars": {
     "APPLE_CLIENT_IDS": "com.rowbusters.web,com.rowbusters.app",
     "GOOGLE_CLIENT_ID": "",
-    "MICROSOFT_CLIENT_ID": ""
+    "MICROSOFT_CLIENT_ID": "64f313de-5c79-4191-b64c-3282a9a41f97"
   },
   // Previews: every pull request gets its own copy at a workers.dev address (Cloudflare runs
   // `wrangler preview` for non-production branches). Each preview gets a NEW, empty database
