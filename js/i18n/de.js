@@ -217,7 +217,7 @@
   'net.reaching': 'Verbindungsserver wird erreicht…',
   'net.creating': 'Raum wird erstellt…',
   'net.signalRetry': 'Neue Verbindung zum Verbindungsserver… neue Spieler können kurz eventuell nicht beitreten.',
-  'srv.otherVersion': 'In diesem Raum läuft eine andere Version von Rowbusters. Lade die Seite auf beiden Handys neu.',
+  'srv.otherVersion': 'In diesem Raum läuft eine andere Version von Rowbusters. Aktualisiere Rowbusters auf beiden Handys oder lade es neu.',
   'srv.full': 'Der Raum ist voll ({n} Spieler).',
   'net.codeLength': 'Raumcodes haben 5 Buchstaben oder Ziffern.',
   'net.connecting': 'Verbinde mit Raum {code}…',

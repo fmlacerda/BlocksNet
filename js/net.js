@@ -400,7 +400,7 @@
       if (g) g.rx = Date.now();
       if (m.t === 'ping') return;
       if (m.t === 'hello') {
-        if (m.v !== PROTO) { conn.send({ t: 'reject', reason: 'This room runs a different version of Rowbusters. Reload the page on both phones.', code: 'otherVersion' }); return; }
+        if (m.v !== PROTO) { conn.send({ t: 'reject', reason: 'This room runs a different version of Rowbusters. Update or reload Rowbusters on both phones.', code: 'otherVersion' }); return; }
         const cid = String(m.cid || conn.id).slice(0, 20);
         // A guest coming back after a dropped connection replaces its old, dead entry.
         let back = false;

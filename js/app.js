@@ -887,7 +887,7 @@
           if (!b) return;
           if (b.dataset.provider) {
             readSettings();
-            const r = await RB.account.start(b.dataset.provider);   // only the app's Apple sign-in comes back here
+            const r = await RB.account.start(b.dataset.provider);   // only the app's sign-ins come back here
             if (r) openMP(r.error ? t('acct.err.' + r.error) : t('acct.welcome', { provider: t('acct.' + r.provider) }), !r.error);
             return;
           }

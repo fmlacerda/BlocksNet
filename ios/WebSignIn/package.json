@@ -1,0 +1,9 @@
+{
+  "name": "rowbusters-web-sign-in",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Opens a provider's sign-in page in Apple's sign-in sheet and hands back the return address (iPhone app only).",
+  "files": ["ios/", "Package.swift"],
+  "capacitor": { "ios": { "src": "ios" } },
+  "peerDependencies": { "@capacitor/core": ">=8.0.0" }
+}

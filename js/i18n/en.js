@@ -218,7 +218,7 @@
   'net.reaching': 'Reaching the connection server…',
   'net.creating': 'Creating room…',
   'net.signalRetry': 'Reconnecting to the connection server… new players may not be able to join for a moment.',
-  'srv.otherVersion': 'This room runs a different version of Rowbusters. Reload the page on both phones.',
+  'srv.otherVersion': 'This room runs a different version of Rowbusters. Update or reload Rowbusters on both phones.',
   'srv.full': 'The room is full ({n} players).',
   'net.codeLength': 'Room codes have 5 letters or digits.',
   'net.connecting': 'Connecting to room {code}…',
