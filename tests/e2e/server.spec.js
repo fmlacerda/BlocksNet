@@ -12,6 +12,11 @@ test('site: game files are served, server code and config are not', async () => 
   expect(await get('/version.json')).toBe(200);
   for (const hidden of ['/server/worker.js', '/wrangler.jsonc', '/README.md', '/.git/HEAD', '/package.json', '/tests/e2e/helpers.js', '/CLAUDE.md', '/tools/make-legal.py'])
     expect(await get(hidden), hidden).toBe(404);
+  // Microsoft checks this file to show rowbusters.com as the sign-in publisher.
+  const ms = await fetch(BASE + '/.well-known/microsoft-identity-association.json');
+  expect(ms.status).toBe(200);
+  expect(ms.headers.get('content-type')).toContain('application/json');
+  expect((await ms.json()).associatedApplications[0].applicationId).toBe('64f313de-5c79-4191-b64c-3282a9a41f97');
   const h = await (await fetch(BASE + '/health')).json();
   const v = JSON.parse(await (await fetch(BASE + '/version.json')).text()).version;
   expect(h).toMatchObject({ ok: true, service: 'rowbusters', version: v, rooms: 7 });
