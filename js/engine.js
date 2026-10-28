@@ -666,7 +666,7 @@
   }
 
   global.RB = Object.assign(global.RB || {}, {
-    VERSION: '2026.10.28f',   // keep in sync with version.json (used for auto-update)
+    VERSION: '2026.10.28g',   // keep in sync with version.json (used for auto-update)
     W, H, MAX_INV, COLORS, SHAPES, SPECIAL_INFO, SPECIAL_FREQ, SPEEDS, MODES, DEFAULT_SETTINGS,
     Room, Player, BotBrain, pieceCells, isSpecial, encodeField, decodeField,
   });
