@@ -21,9 +21,13 @@
   const MAX_PLAYERS = 4;
   const DEFAULTS = { name: RB.t('lobby.defaultName'), bots: 3, skill: 'normal', speed: 'classic', startLevel: 1, linesPerLevel: 2, fullscreen: true };
 
+  // Inside the iPhone app (Capacitor).
+  const NATIVE = !!(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform());
   // Fullscreen API: works in Android / Linux phone browsers and on desktop. iPhone Safari has
   // no page fullscreen; there the page is full screen when launched from "Add to Home Screen".
-  const fsSupported = !!(document.documentElement.requestFullscreen || document.documentElement.webkitRequestFullscreen);
+  // The app is full screen already: iOS's web fullscreen there would cover the camera cutout
+  // and add its own close button.
+  const fsSupported = !NATIVE && !!(document.documentElement.requestFullscreen || document.documentElement.webkitRequestFullscreen);
   const isStandalone = () => (window.matchMedia && matchMedia('(display-mode: standalone)').matches) || navigator.standalone === true;
   const isIOS = /iP(hone|od|ad)/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
 
@@ -31,7 +35,7 @@
     const el = document.documentElement;
     if (document.fullscreenElement || document.webkitFullscreenElement) return;
     const req = el.requestFullscreen || el.webkitRequestFullscreen;
-    if (!req) return;
+    if (!req || !fsSupported) return;
     try {
       const p = req.call(el, { navigationUI: 'hide' });
       const lock = () => { if (orientation && screen.orientation && screen.orientation.lock) screen.orientation.lock(orientation).catch(() => {}); };
@@ -40,8 +44,7 @@
   }
 
   let muted = false;
-  // Inside the iPhone app (Capacitor): iPhones have no web vibration, so the app's haptics stand in.
-  const NATIVE = !!(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform());
+  // In the app: iPhones have no web vibration, so the app's haptics stand in.
   function haptic(ms) {
     if (muted) return;
     try {
