@@ -64,7 +64,8 @@ test('the app copy: Apple sign-in sheet, haptics, no Home Screen tip @webkit', a
   expect(fs.existsSync(path.join(WWW, 'server')) || fs.existsSync(path.join(WWW, 'tests')) || fs.existsSync(path.join(WWW, 'ios'))).toBe(false);
   const p = await openApp(browser);
   expect(await p.evaluate(() => Capacitor.isNativePlatform())).toBe(true);
-  await expect(p.locator('.rb-fs-hint')).toHaveCount(0);            // the app is already full screen
+  await expect(p.locator('.rb-fs-hint')).toHaveCount(0);            // the app is already full screen,
+  await expect(p.locator('#rb-fs')).toHaveCount(0);                  // so no web full screen either
 
   await p.fill('#rb-name', 'Ida');
   await p.click('#rb-mp-open');
@@ -80,6 +81,7 @@ test('the app copy: Apple sign-in sheet, haptics, no Home Screen tip @webkit', a
 
   await p.click('#rb-start');                                        // a game: tapping an opponent buzzes
   await p.waitForFunction(() => RB.current.room.running);
+  expect(await p.evaluate(() => !!document.fullscreenElement)).toBe(false);
   await p.evaluate(() => { RB.current.me.inv = ['c']; });
   await p.tap('.opp >> nth=0');
   await expect.poll(() => p.evaluate(() => window.nativeCalls.some(c => c.plugin === 'Haptics' && c.method === 'impact'))).toBe(true);
