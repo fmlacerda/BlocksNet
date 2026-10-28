@@ -239,6 +239,12 @@ test('practice: lessons teach the controls and each special, and are remembered 
   await expect(p.locator('#rb-practice-progress')).toContainText('New?');
   await p.click('#rb-practice-open');
   await expect(p.locator('#rb-lessons li')).toHaveCount(13);
+  const inside = await p.evaluate(() => {                            // the whole list sits inside its box
+    const panel = document.querySelector('.rb-practice-panel').getBoundingClientRect();
+    const last = document.querySelector('#rb-lessons li:last-child').getBoundingClientRect();
+    return last.bottom <= panel.bottom;
+  });
+  expect(inside).toBe(true);
   await p.click('[data-lesson="0"]');                                // move, turn and drop: fill the gap
   await expect(p.locator('#rb-coach')).toBeVisible();
   for (let i = 0; i < 6; i++) await p.tap('#bR');
