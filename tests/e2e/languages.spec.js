@@ -1,13 +1,14 @@
 // Languages in real pages: every screen fits a small phone (320 px wide) in every language,
 // the picker switches language, and server messages arrive in the player's own language.
 const { test, expect } = require('@playwright/test');
-const { GAME_URL, client, emptyRoom } = require('./helpers');
+const { GAME_URL, client, emptyRoom, muteSound } = require('./helpers');
 
 test.describe.configure({ mode: 'serial' });
 const LANGS = ['en', 'es', 'pt', 'fr', 'de'];
 
 async function openIn(browser, lang, viewport = { width: 320, height: 568 }) {
   const context = await browser.newContext({ viewport, locale: 'en-US' });
+  await muteSound(context);
   const page = await context.newPage();
   page.errors = [];
   page.on('pageerror', e => page.errors.push(e.message));

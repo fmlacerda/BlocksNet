@@ -64,6 +64,7 @@ async function openGame(browser, name, contextOpts = {}) {
   const context = await browser.newContext({ viewport: { width: 393, height: 852 }, ...contextOpts });
   // The one-time online rules are already accepted (tests of the rules sheet use their own pages).
   await context.addInitScript(() => { try { if (!localStorage.getItem('rb.terms')) localStorage.setItem('rb.terms', JSON.stringify('2026-10')); } catch (e) { /* no storage */ } });
+  await muteSound(context);
   const page = await context.newPage();
   page.errors = [];
   page.on('pageerror', e => page.errors.push(e.message));
@@ -71,6 +72,12 @@ async function openGame(browser, name, contextOpts = {}) {
   await page.fill('#rb-name', name);
   if (await page.locator('#rb-fs').count()) await page.uncheck('#rb-fs');
   return page;
+}
+
+// The CI machines have no sound card, and Safari's engine there crashes now and then while
+// playing sounds ("Target crashed"), so test pages start muted.
+async function muteSound(context) {
+  await context.addInitScript(() => { try { localStorage.setItem('rb.muted', '1'); } catch (e) { /* no storage */ } });
 }
 
 async function joinPublicRoom(page, n, { watch = false } = {}) {
@@ -102,4 +109,4 @@ async function gameOver(...pages) {
   for (const p of pages) await p.waitForFunction(() => !RB.current.room.running, null, { timeout: 120000 });
 }
 
-module.exports = { BASE, GAME_URL, PROTO, VERSION, WS, sleep, client, lobby, roomCard, emptyRoom, openGame, joinPublicRoom, hostStart, knockOut, autoplay, gameOver };
+module.exports = { BASE, GAME_URL, PROTO, VERSION, WS, sleep, client, lobby, roomCard, emptyRoom, openGame, muteSound, joinPublicRoom, hostStart, knockOut, autoplay, gameOver };

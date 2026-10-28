@@ -33,8 +33,6 @@ jobs:
         run: npm run test:e2e
         env:
           RB_TEST_OUT: ${{ runner.temp }}/rowbusters-test-results
-          # The browsers' own output in the log (e.g. why a page crashed).
-          DEBUG: pw:browser
       - name: Keep the test report
         if: failure()
         uses: actions/upload-artifact@v4
