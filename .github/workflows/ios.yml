@@ -54,6 +54,8 @@ jobs:
           ASC_KEY: ${{ secrets.APP_STORE_CONNECT_KEY }}
         run: printf '%s\n' "$ASC_KEY" > "$RUNNER_TEMP/AuthKey.p8"
 
+      # Signed for distribution straight away: a development signature would need a
+      # registered test iPhone, which TestFlight builds don't.
       - name: Build and sign
         run: |
           xcodebuild -version
@@ -63,6 +65,7 @@ jobs:
             -allowProvisioningUpdates \
             -authenticationKeyPath "$RUNNER_TEMP/AuthKey.p8" -authenticationKeyID "$ASC_KEY_ID" -authenticationKeyIssuerID "$ASC_ISSUER_ID" \
             DEVELOPMENT_TEAM="$TEAM_ID" CODE_SIGN_STYLE=Automatic \
+            CODE_SIGN_IDENTITY="Apple Distribution" \
             MARKETING_VERSION="$(node -p "require('./package.json').version")" \
             CURRENT_PROJECT_VERSION="${{ github.run_number }}"
 
