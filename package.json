@@ -1,16 +1,25 @@
 {
   "name": "rowbusters",
   "private": true,
+  "version": "1.0.0",
   "description": "Rowbusters: multiplayer block-dropping game (web + phone apps). The game itself needs no build step.",
   "scripts": {
     "dev": "wrangler dev --port 8787",
     "test": "npm run test:unit && npm run test:e2e",
     "test:unit": "node --test \"tests/unit/*.test.js\"",
     "test:e2e": "playwright test",
-    "deploy:staging": "wrangler deploy --env staging"
+    "deploy:staging": "wrangler deploy --env staging",
+    "app:sync": "node tools/build-www.js && cap sync ios"
   },
   "devDependencies": {
+    "@capacitor/cli": "8.5.3",
     "@playwright/test": "1.56.1",
     "wrangler": "4.149.0"
+  },
+  "dependencies": {
+    "@capacitor-community/apple-sign-in": "7.1.0",
+    "@capacitor/core": "8.5.3",
+    "@capacitor/haptics": "8.0.2",
+    "@capacitor/ios": "8.5.3"
   }
 }

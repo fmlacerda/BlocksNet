@@ -3,3 +3,11 @@
 node_modules/
 test-results/
 playwright-report/
+# phone apps: www/ and the copies Capacitor makes from it are rebuilt by `npm run app:sync`
+www/
+ios/App/App/public/
+ios/App/App/capacitor.config.json
+ios/App/App/config.xml
+ios/App/build/
+ios/DerivedData/
+xcuserdata/

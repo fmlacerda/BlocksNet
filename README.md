@@ -64,6 +64,12 @@ Players can stay guests, or sign in with **Apple, Google or Microsoft (Hotmail, 
 
 Each provider needs a one-time registration whose public client id goes into `vars` in `wrangler.jsonc` (`APPLE_CLIENT_IDS`, `GOOGLE_CLIENT_ID`, `MICROSOFT_CLIENT_ID`); a provider without one shows no button. The return addresses to register are `https://rowbusters.com/` and `https://blocksnet.fmlacerda.workers.dev/`. Tests use a throwaway test provider whose keys exist only on the local test server.
 
+## iPhone app
+
+The iPhone app is the same game wrapped with [Capacitor](https://capacitorjs.com): `npm run app:sync` copies the game files into `www/` (`tools/build-www.js`, the same files rowbusters.com serves, plus Capacitor's bridge script) and from there into the Xcode project in `ios/`. Inside the app, Apple's own sign-in sheet is used (Google and Microsoft sign-in stay web-only for now), vibration goes through the iPhone's haptics, and the privacy and terms pages open in place. The app icon and launch screen come from `icon.svg` (`node tools/make-app-images.js`).
+
+Builds go to TestFlight from GitHub: Actions → "iPhone app → TestFlight" → Run workflow (`.github/workflows/ios.yml`). It needs an App Store Connect API key in the repository's secrets (`APP_STORE_CONNECT_KEY_ID`, `APP_STORE_CONNECT_ISSUER_ID`, `APP_STORE_CONNECT_KEY`) and the team id in a variable (`APPLE_TEAM_ID`); signing is automatic. The app's version is `version` in `package.json`; the build number is the workflow's run number.
+
 ## Keeping online play friendly
 
 - **Online rules:** the first time someone plays online they accept a short set of rules (be kind, no offensive chat or nicknames), with links to the [terms](terms.html) and [privacy policy](privacy.html). App stores require this for games with chat.

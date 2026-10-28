@@ -200,3 +200,16 @@ test('phones: tapping an opponent fires a special, even right after a button pre
   expect(p.errors).toEqual([]);
   await p.context().close();
 });
+
+test('muted players never start audio; switching sound on starts it', async ({ browser }) => {
+  const p = await openGame(browser, 'Hush');
+  await p.click('#rb-start');
+  await p.waitForFunction(() => RB.current.room.running);
+  await p.click('#bDrop');
+  expect(await p.evaluate(() => RB.sound._ctx())).toBeNull();
+  await p.click('#muteBtn');
+  expect(await p.evaluate(() => RB.sound.muted)).toBe(false);
+  expect(await p.evaluate(() => !!RB.sound._ctx())).toBe(true);
+  expect(p.errors).toEqual([]);
+  await p.context().close();
+});

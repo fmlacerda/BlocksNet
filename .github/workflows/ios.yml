@@ -1,0 +1,81 @@
+# Builds the iPhone app and sends it to TestFlight. Started by hand: GitHub → Actions →
+# "iPhone app → TestFlight" → Run workflow (from main). Needs, in the repo settings
+# (Settings → Secrets and variables → Actions):
+#   secrets   APP_STORE_CONNECT_KEY_ID, APP_STORE_CONNECT_ISSUER_ID,
+#             APP_STORE_CONNECT_KEY (the whole AuthKey_….p8 file, an Admin key)
+#   variable  APPLE_TEAM_ID (10 characters, from developer.apple.com → Membership)
+# Signing is automatic: Xcode makes the certificate and profile through the key.
+name: iPhone app → TestFlight
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ios-testflight
+  cancel-in-progress: false
+
+jobs:
+  testflight:
+    # Apple accepts only builds made with the latest iOS SDK (Xcode 26).
+    runs-on: macos-26
+    timeout-minutes: 45
+    env:
+      ASC_KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
+      ASC_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+      TEAM_ID: ${{ vars.APPLE_TEAM_ID }}
+    steps:
+      - name: Check the Apple settings are there
+        env:
+          ASC_KEY: ${{ secrets.APP_STORE_CONNECT_KEY }}
+        run: |
+          missing=""
+          [ -n "$ASC_KEY_ID" ] || missing="$missing APP_STORE_CONNECT_KEY_ID"
+          [ -n "$ASC_ISSUER_ID" ] || missing="$missing APP_STORE_CONNECT_ISSUER_ID"
+          [ -n "$ASC_KEY" ] || missing="$missing APP_STORE_CONNECT_KEY"
+          [ -n "$TEAM_ID" ] || missing="$missing APPLE_TEAM_ID(variable)"
+          if [ -n "$missing" ]; then echo "::error::Missing repository settings:$missing"; exit 1; fi
+
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Game rules
+        run: npm run test:unit
+      - name: Copy the game into the app
+        run: npm run app:sync
+
+      - name: App Store Connect key
+        env:
+          ASC_KEY: ${{ secrets.APP_STORE_CONNECT_KEY }}
+        run: printf '%s\n' "$ASC_KEY" > "$RUNNER_TEMP/AuthKey.p8"
+
+      - name: Build and sign
+        run: |
+          xcodebuild -version
+          xcodebuild archive \
+            -project ios/App/App.xcodeproj -scheme App -configuration Release \
+            -destination 'generic/platform=iOS' -archivePath "$RUNNER_TEMP/App.xcarchive" \
+            -allowProvisioningUpdates \
+            -authenticationKeyPath "$RUNNER_TEMP/AuthKey.p8" -authenticationKeyID "$ASC_KEY_ID" -authenticationKeyIssuerID "$ASC_ISSUER_ID" \
+            DEVELOPMENT_TEAM="$TEAM_ID" CODE_SIGN_STYLE=Automatic \
+            MARKETING_VERSION="$(node -p "require('./package.json').version")" \
+            CURRENT_PROJECT_VERSION="${{ github.run_number }}"
+
+      - name: Send to TestFlight
+        run: |
+          cp ios/ExportOptions.plist "$RUNNER_TEMP/ExportOptions.plist"
+          plutil -insert teamID -string "$TEAM_ID" "$RUNNER_TEMP/ExportOptions.plist"
+          xcodebuild -exportArchive \
+            -archivePath "$RUNNER_TEMP/App.xcarchive" -exportOptionsPlist "$RUNNER_TEMP/ExportOptions.plist" \
+            -exportPath "$RUNNER_TEMP/export" -allowProvisioningUpdates \
+            -authenticationKeyPath "$RUNNER_TEMP/AuthKey.p8" -authenticationKeyID "$ASC_KEY_ID" -authenticationKeyIssuerID "$ASC_ISSUER_ID"
+          echo "Build ${{ github.run_number }} sent. It appears in App Store Connect → TestFlight after Apple's processing (10–30 minutes)."
+
+      - name: Remove the key
+        if: always()
+        run: rm -f "$RUNNER_TEMP/AuthKey.p8"

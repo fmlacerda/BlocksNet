@@ -15,6 +15,9 @@
       client_id: id, redirect_uri: back, response_type: 'id_token', response_mode: 'fragment', scope: 'openid', nonce, state, prompt: 'select_account' }),
   };
   const PROVIDERS = Object.keys(AUTH);
+  // Inside the iPhone app (Capacitor) Apple signs in natively; the web page flows of Google and
+  // Microsoft can't return to the app yet, so the app offers Apple only.
+  const NATIVE = !!(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform());
 
   const rand = () => [...crypto.getRandomValues(new Uint8Array(16))].map(b => b.toString(16).padStart(2, '0')).join('');
   const get = (k, store = localStorage) => { try { return JSON.parse(store.getItem(k) || 'null'); } catch (e) { return null; } };
@@ -34,6 +37,17 @@
     return d;
   };
 
+  // The server checks the provider's token and answers with the account's player id and nickname.
+  async function complete(provider, idToken, nonce) {
+    try {
+      const r = await post('/auth/signin', { provider, idToken, nonce, pid: RB.net.playerId(), name: nickname() });
+      setPid(r.pid);
+      if (r.name) setNickname(r.name);
+      set('rb.account', { provider });
+      return { provider, created: r.created };
+    } catch (e) { return { error: 'failed' }; }
+  }
+
   let config = null;
   const account = {
     PROVIDERS,
@@ -42,11 +56,20 @@
     // Which providers the server has switched on.
     async providers() {
       if (!config) config = await fetch(RB.net.serverURL() + '/auth/config', { cache: 'no-store' }).then(r => r.json()).catch(() => ({}));
-      return PROVIDERS.filter(p => config[p]);
+      return PROVIDERS.filter(p => config[p] && (!NATIVE || p === 'apple'));
     },
     // Leaves for the provider's sign-in page; the game reopens afterwards and finish() completes it.
+    // In the app, Apple's own sign-in sheet opens instead, and this resolves like finish().
     async start(provider) {
       await account.providers();
+      if (NATIVE && provider === 'apple') {
+        const nonce = rand();
+        try {
+          const SIWA = window.Capacitor.Plugins.SignInWithApple || window.Capacitor.registerPlugin('SignInWithApple');
+          const r = await SIWA.authorize({ nonce, state: rand() });   // no name, no email
+          return await complete(provider, r.response.identityToken, nonce);
+        } catch (e) { return { error: /cancel|1001/i.test(String(e && (e.message || e.code))) ? 'cancelled' : 'failed' }; }
+      }
       const nonce = rand(), state = rand();
       set('rb.signin', { provider, nonce, state, back: location.search }, sessionStorage);
       location.assign(AUTH[provider](config[provider], location.origin + location.pathname, nonce, state));
@@ -62,13 +85,7 @@
       history.replaceState(null, '', location.pathname + ((pending && pending.back) || location.search));
       if (!pending || h.get('state') !== pending.state) return { error: 'expired' };
       if (h.has('error')) return { error: h.get('error') === 'access_denied' || h.get('error') === 'user_cancelled_authorize' ? 'cancelled' : 'failed' };
-      try {
-        const r = await post('/auth/signin', { provider: pending.provider, idToken: h.get('id_token'), nonce: pending.nonce, pid: RB.net.playerId(), name: nickname() });
-        setPid(r.pid);
-        if (r.name) setNickname(r.name);
-        set('rb.account', { provider: pending.provider });
-        return { provider: pending.provider, created: r.created };
-      } catch (e) { return { error: 'failed' }; }
+      return complete(pending.provider, h.get('id_token'), pending.nonce);
     },
     // Signed in: a new nickname is the account's, on every device. Resolves to the name it got
     // (a numbered variant when someone else has it).

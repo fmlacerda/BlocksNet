@@ -80,7 +80,7 @@
     }
   }
   ['pointerdown', 'pointerup', 'touchstart', 'touchend', 'mousedown', 'click', 'keydown']
-    .forEach(ev => addEventListener(ev, unlock, { capture: true, passive: true }));
+    .forEach(ev => addEventListener(ev, () => { if (!muted) unlock(); }, { capture: true, passive: true }));
   // iOS suspends audio when the page goes to the background; the next tap restarts it.
 
   // One oscillator note with a quick attack and exponential decay.
@@ -146,6 +146,8 @@
   function setMuted(m) {
     muted = !!m;
     try { localStorage.setItem('rb.muted', muted ? '1' : '0'); } catch (e) { /* storage unavailable */ }
+    // Muted players never start audio; switching sound on (a tap) starts it.
+    if (!muted) unlock();
   }
 
   // For the lobby's "Test sound" button: what the phone's audio is doing.
