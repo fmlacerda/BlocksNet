@@ -295,6 +295,7 @@
   'srv.muted': 'Vários jogadores denunciaram você, então seu chat está pausado por enquanto.',
   'lobby.privacy': 'Privacidade',
   'lobby.terms': 'Termos',
+  'lobby.support': 'Ajuda',
   'acct.deleteGuest': 'Excluir meus resultados',
   'acct.confirmDeleteGuest': 'Excluir todos os seus resultados do ranking? Não dá para desfazer.',
   'acct.deletedGuest': 'Seus resultados foram excluídos.',
