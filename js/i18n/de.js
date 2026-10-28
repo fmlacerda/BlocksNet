@@ -295,6 +295,7 @@
   'srv.muted': 'Mehrere Spieler haben dich gemeldet, dein Chat ist deshalb vorerst pausiert.',
   'lobby.privacy': 'Datenschutz',
   'lobby.terms': 'Bedingungen',
+  'lobby.support': 'Hilfe',
   'acct.deleteGuest': 'Meine Ergebnisse löschen',
   'acct.confirmDeleteGuest': 'Alle deine Ergebnisse aus der Rangliste löschen? Das lässt sich nicht rückgängig machen.',
   'acct.deletedGuest': 'Deine Ergebnisse wurden gelöscht.',

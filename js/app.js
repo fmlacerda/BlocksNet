@@ -154,7 +154,8 @@
           ${fsRow}
           <div class="rb-sound-test"><button class="rb-btn-secondary" id="rb-test-sound" type="button">&#128266; ${t('lobby.testSound')}</button><span id="rb-sound-status"></span></div>
           <p class="rb-version">v${RB.VERSION}${RB.net ? ` · <button class="rb-linkbtn" id="rb-diag-open" type="button">${t('lobby.diag')}</button>` : ''}
-            · <a class="rb-linkbtn" href="privacy.html" target="_blank">${t('lobby.privacy')}</a> · <a class="rb-linkbtn" href="terms.html" target="_blank">${t('lobby.terms')}</a></p>
+            · <a class="rb-linkbtn" href="privacy.html" target="_blank">${t('lobby.privacy')}</a> · <a class="rb-linkbtn" href="terms.html" target="_blank">${t('lobby.terms')}</a>
+            · <a class="rb-linkbtn" id="rb-support" href="support.html" target="_blank">${t('lobby.support')}</a></p>
           <button class="rb-btn-primary" id="rb-settings-close" type="button">${t('close')}</button>
         </div>
       </div>

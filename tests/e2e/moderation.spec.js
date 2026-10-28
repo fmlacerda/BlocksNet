@@ -1,5 +1,5 @@
 // Keeping online play friendly: chat filter, nickname filter, reports (mute and rename after
-// several), blocking, the one-time online rules, Play now, and the privacy and terms pages.
+// several), blocking, the one-time online rules, Play now, and the privacy, terms and support pages.
 const { test, expect } = require('@playwright/test');
 const { BASE, GAME_URL, client, emptyRoom, openGame } = require('./helpers');
 
@@ -83,8 +83,8 @@ test('Play now: online rules first, then a room; alone, the game starts with bot
   await emptyRoom(1);
 });
 
-test('privacy and terms pages: every language, the contact address, the player’s language', async ({ browser }) => {
-  for (const page of ['privacy', 'terms']) {
+test('privacy, terms and support pages: every language, the contact address, the player’s language', async ({ browser }) => {
+  for (const page of ['privacy', 'terms', 'support']) {
     const html = await (await fetch(`${BASE}/${page}.html`)).text();
     for (const l of ['en', 'es', 'pt', 'fr', 'de']) expect(html, `${page} ${l}`).toContain(`<article lang="${l}"`);
     expect(html).toContain('data-contact="support@rowbusters.com"');
@@ -94,4 +94,17 @@ test('privacy and terms pages: every language, the contact address, the player�
   await expect(p.locator('article:visible h1')).toHaveText('Conditions d’utilisation');
   await expect(p.locator('article:visible .contact')).toHaveAttribute('href', 'mailto:support@rowbusters.com');
   await p.context().close();
+  // rowbusters.com/support (the App Store's support address) opens the help page, with the address first.
+  const s = await (await browser.newContext({ locale: 'de-DE' })).newPage();
+  const res = await s.goto(`${BASE}/support`);
+  expect(res.status()).toBe(200);
+  await expect(s.locator('article:visible h1')).toHaveText('Hilfe und Support');
+  await expect(s.locator('article:visible h2 + p + p .contact')).toHaveText('support@rowbusters.com');
+  await expect(s.locator('article:visible .legal a')).toHaveCount(2);
+  await s.context().close();
+  // The game links to it from Settings.
+  const g = await openGame(browser, 'Helpme');
+  await g.click('#rb-settings-open');
+  await expect(g.locator('#rb-support')).toHaveAttribute('href', 'support.html');
+  await g.context().close();
 });

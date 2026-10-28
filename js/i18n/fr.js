@@ -295,6 +295,7 @@
   'srv.muted': 'Plusieurs joueurs t’ont signalé, ton chat est donc en pause pour le moment.',
   'lobby.privacy': 'Confidentialité',
   'lobby.terms': 'Conditions',
+  'lobby.support': 'Aide',
   'acct.deleteGuest': 'Supprimer mes résultats',
   'acct.confirmDeleteGuest': 'Supprimer tous tes résultats du classement ? C’est définitif.',
   'acct.deletedGuest': 'Tes résultats ont été supprimés.',

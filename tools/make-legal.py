@@ -1,10 +1,16 @@
-# Writes privacy.html and terms.html (all five languages in each page). Edit the texts here, then run:
+# Writes privacy.html, terms.html and support.html (all five languages in each page). Edit the texts here, then run:
 #   python3 tools/make-legal.py . contact@example.com
 # (the second argument is the contact email shown on both pages).
 import html, sys
 OUT = sys.argv[1]
 UPDATED = {'en': 'Last updated: 27 October 2026', 'es': 'Última actualización: 27 de octubre de 2026', 'pt': 'Última atualização: 27 de outubro de 2026',
            'fr': 'Dernière mise à jour : 27 octobre 2026', 'de': 'Zuletzt aktualisiert: 27. Oktober 2026'}
+SUPPORT_UPDATED = {'en': 'Last updated: 28 October 2026', 'es': 'Última actualización: 28 de octubre de 2026', 'pt': 'Última atualização: 28 de outubro de 2026',
+                   'fr': 'Dernière mise à jour : 28 octobre 2026', 'de': 'Zuletzt aktualisiert: 28. Oktober 2026'}
+# The privacy policy and terms, linked at the foot of the support page.
+LEGAL = {'en': ('Privacy policy', 'Terms of use'), 'es': ('Política de privacidad', 'Condiciones de uso'),
+         'pt': ('Política de privacidade', 'Termos de uso'), 'fr': ('Politique de confidentialité', 'Conditions d’utilisation'),
+         'de': ('Datenschutzerklärung', 'Nutzungsbedingungen')}
 BACK = {'en': '← Back to the game', 'es': '← Volver al juego', 'pt': '← Voltar ao jogo', 'fr': '← Retour au jeu', 'de': '← Zurück zum Spiel'}
 
 PRIVACY = {
@@ -183,18 +189,80 @@ TERMS = {
 ]),
 }
 
-def page(name, data, title_key):
+SUPPORT = {
+'en': ('Help and support', [
+ ('Contact us', ['Questions, problems, ideas or a player to report? Write to us and we usually answer within 2 days:']),
+ ('Learn to play', ['On the “Play solo” tab, open Practice: short lessons show the controls and what each special does.']),
+ ('Common questions', [
+  'The online rooms are empty: open a room and add bots, or tap “Play now” to be matched with other players.',
+  'No sound on iPhone: check the speaker button in the game, then open Settings (⚙) on the main screen and tap “Test sound”.',
+  'One ranking on all your devices: sign in with Apple, Google or Microsoft under “Play online” → Multiplayer.',
+  'Change the language: Settings (⚙) on the main screen.']),
+ ('Report or block a player', ['In a room, tap the player’s name to report or block them. Players reported by several others are muted or renamed automatically, and we review reports within 24 hours.']),
+ ('Delete your data', ['Under “Play online” → Multiplayer, tap “Delete account” (signed in) or “Delete my results” (guest). Everything is deleted at once.']),
+]),
+'es': ('Ayuda y soporte', [
+ ('Contáctanos', ['¿Preguntas, problemas, ideas o un jugador que denunciar? Escríbenos; solemos responder en 2 días:']),
+ ('Aprende a jugar', ['En la pestaña “Jugar solo”, abre Práctica: lecciones cortas muestran los controles y qué hace cada especial.']),
+ ('Preguntas frecuentes', [
+  'Las salas en línea están vacías: abre una sala y añade bots, o toca “Jugar ya” para unirte a otros jugadores.',
+  'No hay sonido en el iPhone: revisa el botón de altavoz del juego y luego abre Ajustes (⚙) en la pantalla principal y toca “Probar sonido”.',
+  'Un solo ranking en todos tus dispositivos: inicia sesión con Apple, Google o Microsoft en “Jugar en línea” → Multijugador.',
+  'Cambiar el idioma: Ajustes (⚙) en la pantalla principal.']),
+ ('Denunciar o bloquear a un jugador', ['En una sala, toca el nombre del jugador para denunciarlo o bloquearlo. Quien recibe denuncias de varios jugadores queda silenciado o renombrado automáticamente, y revisamos las denuncias en 24 horas.']),
+ ('Borrar tus datos', ['En “Jugar en línea” → Multijugador, toca “Eliminar cuenta” (con sesión iniciada) o “Eliminar mis resultados” (invitado). Todo se borra al instante.']),
+]),
+'pt': ('Ajuda e suporte', [
+ ('Fale conosco', ['Dúvidas, problemas, ideias ou um jogador para denunciar? Escreva para nós; costumamos responder em até 2 dias:']),
+ ('Aprenda a jogar', ['Na aba “Jogar sozinho”, abra o Treino: lições curtas mostram os controles e o que cada especial faz.']),
+ ('Perguntas frequentes', [
+  'As salas online estão vazias: abra uma sala e adicione bots, ou toque em “Jogar agora” para entrar com outros jogadores.',
+  'Sem som no iPhone: confira o botão de alto-falante no jogo, depois abra Configurações (⚙) na tela inicial e toque em “Testar som”.',
+  'Um só ranking em todos os seus aparelhos: entre com Apple, Google ou Microsoft em “Jogar online” → Multijogador.',
+  'Mudar o idioma: Configurações (⚙) na tela inicial.']),
+ ('Denunciar ou bloquear um jogador', ['Em uma sala, toque no nome do jogador para denunciá-lo ou bloqueá-lo. Quem é denunciado por vários jogadores fica sem chat ou tem o apelido trocado automaticamente, e analisamos as denúncias em até 24 horas.']),
+ ('Excluir seus dados', ['Em “Jogar online” → Multijogador, toque em “Excluir conta” (com login) ou “Excluir meus resultados” (convidado). Tudo é excluído na hora.']),
+]),
+'fr': ('Aide et assistance', [
+ ('Nous contacter', ['Une question, un problème, une idée ou un joueur à signaler ? Écris-nous, nous répondons en général sous 2 jours :']),
+ ('Apprendre à jouer', ['Dans l’onglet « Jouer seul », ouvre Entraînement : de courtes leçons montrent les commandes et ce que fait chaque spécial.']),
+ ('Questions fréquentes', [
+  'Les salons en ligne sont vides : ouvre un salon et ajoute des bots, ou touche « Jouer maintenant » pour rejoindre d’autres joueurs.',
+  'Pas de son sur iPhone : vérifie le bouton haut-parleur dans le jeu, puis ouvre Réglages (⚙) sur l’écran principal et touche « Tester le son ».',
+  'Un seul classement sur tous tes appareils : connecte-toi avec Apple, Google ou Microsoft dans « Jouer en ligne » → Multijoueur.',
+  'Changer de langue : Réglages (⚙) sur l’écran principal.']),
+ ('Signaler ou bloquer un joueur', ['Dans un salon, touche le nom du joueur pour le signaler ou le bloquer. Un joueur signalé par plusieurs autres est réduit au silence ou renommé automatiquement, et nous examinons les signalements sous 24 heures.']),
+ ('Supprimer tes données', ['Dans « Jouer en ligne » → Multijoueur, touche « Supprimer le compte » (connecté) ou « Supprimer mes résultats » (invité). Tout est supprimé immédiatement.']),
+]),
+'de': ('Hilfe und Support', [
+ ('Kontakt', ['Fragen, Probleme, Ideen oder einen Spieler zu melden? Schreib uns, wir antworten meist innerhalb von 2 Tagen:']),
+ ('Spielen lernen', ['Öffne im Tab „Allein spielen“ das Training: Kurze Lektionen zeigen die Steuerung und was jedes Special macht.']),
+ ('Häufige Fragen', [
+  'Die Online-Räume sind leer: Öffne einen Raum und füge Bots hinzu, oder tippe auf „Jetzt spielen“, um mit anderen zu spielen.',
+  'Kein Ton auf dem iPhone: Prüfe die Lautsprecher-Taste im Spiel, öffne dann die Einstellungen (⚙) auf dem Startbildschirm und tippe auf „Ton testen“.',
+  'Eine Rangliste auf all deinen Geräten: Melde dich unter „Online spielen“ → Mehrspieler mit Apple, Google oder Microsoft an.',
+  'Sprache ändern: Einstellungen (⚙) auf dem Startbildschirm.']),
+ ('Einen Spieler melden oder blockieren', ['Tippe in einem Raum auf den Namen des Spielers, um ihn zu melden oder zu blockieren. Wer von mehreren Spielern gemeldet wird, wird automatisch stummgeschaltet oder umbenannt, und wir prüfen Meldungen innerhalb von 24 Stunden.']),
+ ('Deine Daten löschen', ['Tippe unter „Online spielen“ → Mehrspieler auf „Konto löschen“ (angemeldet) oder „Meine Ergebnisse löschen“ (Gast). Alles wird sofort gelöscht.']),
+]),
+}
+
+def page(name, data, title_key, updated=UPDATED, contact_first=False):
     blocks = []
     for lang, (title, sections) in data.items():
         secs = []
-        for h, paras in sections:
+        contact = '<p><a class="contact" href="#"></a></p>'
+        for i, (h, paras) in enumerate(sections):
             body = ''.join(f'<li>{html.escape(p)}</li>' for p in paras) if len(paras) > 1 else f'<p>{html.escape(paras[0])}</p>'
             if len(paras) > 1: body = f'<ul>{body}</ul>'
+            if contact_first and i == 0: body += contact   # the support page leads with the address
             secs.append(f'<h2>{html.escape(h)}</h2>{body}')
+        foot = (f'<p class="legal"><a href="privacy.html?lang={lang}">{LEGAL[lang][0]}</a> · <a href="terms.html?lang={lang}">{LEGAL[lang][1]}</a></p>'
+                if contact_first else contact)
         blocks.append(f'''<article lang="{lang}" hidden>
-    <h1>{html.escape(title)}</h1><p class="upd">{UPDATED[lang]}</p>
+    <h1>{html.escape(title)}</h1><p class="upd">{updated[lang]}</p>
     {''.join(secs)}
-    <p><a class="contact" href="#"></a></p>
+    {foot}
     <p><a href="./">{BACK[lang]}</a></p>
   </article>''')
     return f'''<!doctype html>
@@ -210,6 +278,7 @@ def page(name, data, title_key):
   main {{ max-width: 680px; margin: 0 auto; padding: 24px 16px 48px; }}
   h1 {{ font-size: 26px; margin: 0 0 4px; }} h2 {{ font-size: 18px; margin: 26px 0 6px; color: #C6FF3D; }}
   .upd {{ color: #A99BCB; font-size: 14px; margin: 0 0 18px; }} ul {{ padding-left: 20px; }} li {{ margin: 6px 0; }}
+  .contact {{ font-size: 18px; font-weight: 700; }} .legal {{ margin-top: 28px; font-size: 14px; }}
   a {{ color: #C6FF3D; }} nav {{ display: flex; gap: 10px; flex-wrap: wrap; font-size: 14px; margin-bottom: 18px; }} nav a {{ color: #C4B8E3; }}
 </style>
 </head>
@@ -240,4 +309,5 @@ def page(name, data, title_key):
 CONTACT = sys.argv[2]
 open(f'{OUT}/privacy.html', 'w').write(page('privacy', PRIVACY, 'privacy'))
 open(f'{OUT}/terms.html', 'w').write(page('terms', TERMS, 'terms'))
+open(f'{OUT}/support.html', 'w').write(page('support', SUPPORT, 'support', SUPPORT_UPDATED, contact_first=True))
 print('written')
