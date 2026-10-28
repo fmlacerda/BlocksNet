@@ -663,7 +663,7 @@
           `<div class="rb-acct-row"><button class="rb-linkbtn" data-act="signout" type="button">${t('acct.signOut')}</button>` +
           `<button class="rb-linkbtn" data-act="delete" type="button">${t('acct.delete')}</button></div>`
         : (list.length ? `<p class="rb-hint">${t('acct.why')}</p><div class="rb-acct-btns">${list.map(p =>
-          `<button class="rb-sso rb-sso-${p}" data-provider="${p}" type="button">${SSO_MARK[p]}<span>${t('acct.continue.' + p)}</span></button>`).join('')}</div>` : '') +
+          `<button class="rb-sso rb-sso-${p}" data-provider="${p}" type="button" aria-label="${t('acct.continue.' + p)}" title="${t('acct.continue.' + p)}">${SSO_MARK[p]}<span>${t('acct.' + p)}</span></button>`).join('')}</div>` : '') +
           `<div class="rb-acct-row"><button class="rb-linkbtn" data-act="deleteGuest" type="button">${t('acct.deleteGuest')}</button></div>`;
       show('rb-acct', true);
     }
