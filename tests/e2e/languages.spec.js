@@ -61,10 +61,23 @@ for (const lang of LANGS) {
     await p.evaluate(() => RB.current.room.players[1].die());
     await expect(p.locator('#log')).toContainText(await t('log.out', { name: await p.evaluate(() => RB.current.room.players[1].name) }));
     expect(await misfits(p), 'game screen').toEqual([]);
+    // Record who shows or hides the game-over screen, so a failure here names its cause.
+    await p.evaluate(() => {
+      const end = document.getElementById('rb-end'), list = end.classList, log = window.endLog = [];
+      for (const m of ['add', 'remove', 'toggle']) {
+        const orig = DOMTokenList.prototype[m];
+        list[m] = function (...a) { log.push(`${Math.round(performance.now())} ${m}(${a.join(',')}) ${(new Error().stack || '').split('\n').slice(1, 4).join(' | ')}`); return orig.apply(this, a); };
+      }
+    });
     await p.evaluate(() => { for (const pl of RB.current.room.players) if (pl !== RB.current.me) pl.die(); });
     expect(await p.evaluate(() => RB.current.room.running), 'game ended').toBe(false);
+    try { await expect(p.locator('#rb-end')).toBeVisible(); } catch (e) {
+      const state = await p.evaluate(() => ({ endLog: window.endLog, running: RB.current.room.running, winner: RB.current.room.winner && RB.current.room.winner.name,
+        session: !!RB.current.session(), nav: performance.getEntriesByType('navigation').map(n => n.type), now: Math.round(performance.now()),
+        visible: [...document.querySelectorAll('.rb-overlay')].filter(o => !o.classList.contains('hidden')).map(o => o.id) }));
+      throw new Error(`game-over screen not shown. Page errors: ${JSON.stringify(p.errors)}. State: ${JSON.stringify(state)}`);
+    }
     expect(p.errors, 'no errors while ending the game').toEqual([]);
-    await expect(p.locator('#rb-end')).toBeVisible();
     await expect(p.locator('#rb-again')).toHaveText(await t('end.again'));
     expect(await misfits(p), 'game over').toEqual([]);
     expect(p.errors).toEqual([]);
