@@ -29,7 +29,7 @@ import { DurableObject } from 'cloudflare:workers';
 import { authConfig, verifySignIn } from './auth.js';
 import { filterChat, badName } from './moderation.js';
 
-const SERVER_VERSION = '2026.10.28b';   // shown on /health, to check which code is deployed
+const SERVER_VERSION = '2026.10.28c';   // shown on /health, to check which code is deployed
 const ROOMS = 7;
 const MAX_PLAYERS = 4;
 const MAX_WATCHERS = 8;

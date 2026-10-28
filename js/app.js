@@ -40,10 +40,19 @@
   }
 
   let muted = false;
+  // Inside the iPhone app (Capacitor): iPhones have no web vibration, so the app's haptics stand in.
+  const NATIVE = !!(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform());
   function haptic(ms) {
     if (muted) return;
-    try { navigator.vibrate && navigator.vibrate(ms); } catch (e) { /* not supported */ }
+    try {
+      const H = NATIVE && window.Capacitor.registerPlugin && (window.Capacitor.Plugins.Haptics || window.Capacitor.registerPlugin('Haptics'));
+      if (H) {
+        if (Array.isArray(ms)) H.notification({ type: 'SUCCESS' });
+        else H.impact({ style: ms >= 100 ? 'HEAVY' : ms >= 30 ? 'MEDIUM' : 'LIGHT' });
+      } else if (navigator.vibrate) navigator.vibrate(ms);
+    } catch (e) { /* not supported */ }
   }
+  RB.haptic = haptic;
 
   // Press-and-hold with DAS/ARR style auto-repeat, using pointer events (works on iOS + Linux phones).
   function bindHold(el, fn, { repeat = true, delay = 160, rate = 45 } = {}) {
@@ -93,7 +102,7 @@
     const opt = (list, cur, label = v => v) => list.map(v => `<option value="${v}" ${v === cur ? 'selected' : ''}>${label(v)}</option>`).join('');
     const fsRow = fsSupported
       ? `<label class="rb-check"><input type="checkbox" id="rb-fs" ${s.fullscreen ? 'checked' : ''}> ${t('lobby.fullscreen')}</label>`
-      : (isIOS && !isStandalone() ? `<p class="rb-hint rb-fs-hint">${t('lobby.iosHint')}</p>` : '');
+      : (isIOS && !isStandalone() && !NATIVE ? `<p class="rb-hint rb-fs-hint">${t('lobby.iosHint')}</p>` : '');
     return `
       <div class="rb-overlay" id="rb-lobby">
         <div class="rb-panel">
@@ -876,7 +885,12 @@
         $('rb-acct').addEventListener('click', async e => {
           const b = e.target.closest('button');
           if (!b) return;
-          if (b.dataset.provider) { readSettings(); RB.account.start(b.dataset.provider); return; }
+          if (b.dataset.provider) {
+            readSettings();
+            const r = await RB.account.start(b.dataset.provider);   // only the app's Apple sign-in comes back here
+            if (r) openMP(r.error ? t('acct.err.' + r.error) : t('acct.welcome', { provider: t('acct.' + r.provider) }), !r.error);
+            return;
+          }
           if (b.dataset.act === 'signout') { RB.account.signOut(); openMP(t('acct.signedOut'), true); return; }
           if (b.dataset.act === 'deleteGuest' && confirm(t('acct.confirmDeleteGuest'))) {
             try { await RB.account.remove(); openMP(t('acct.deletedGuest'), true); }
@@ -1019,6 +1033,12 @@
       const map = { ArrowLeft: act.left, ArrowRight: act.right, ArrowUp: act.rotate, z: act.rotate, x: act.rotate, ArrowDown: act.soft, ' ': act.drop, d: act.discard };
       if (map[k]) { map[k](); e.preventDefault(); }
       else if (/^[1-6]$/.test(k)) act.use(+k);
+    });
+
+    // In the app, pages like the privacy policy open in place (they link back to the game).
+    if (NATIVE) document.addEventListener('click', e => {
+      const a = e.target.closest('a[target="_blank"]');
+      if (a) { e.preventDefault(); location.href = a.href; }
     });
 
     // Online games can't pause: other phones keep playing.

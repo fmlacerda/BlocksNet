@@ -1,0 +1,11 @@
+{
+  "appId": "com.rowbusters.app",
+  "appName": "Rowbusters",
+  "webDir": "www",
+  "backgroundColor": "#160B2E",
+  "ios": {
+    "contentInset": "never",
+    "backgroundColor": "#160B2E",
+    "limitsNavigationsToAppBoundDomains": false
+  }
+}
