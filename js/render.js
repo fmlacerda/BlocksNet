@@ -177,7 +177,7 @@
     if (room > s * 1.2) {
       ctx.font = `700 ${Math.floor(s * 0.42)}px system-ui, sans-serif`;
       ctx.fillStyle = info.color;
-      let name = info.name;
+      let name = RB.t ? RB.t('special.' + inv[0]) : info.name;
       while (name.length > 3 && ctx.measureText(name).width > room) name = name.slice(0, -2) + '…';
       ctx.fillText(name, x, oy + s / 2);
     }

@@ -14,7 +14,7 @@ async function openIn(browser, lang, viewport = { width: 320, height: 568 }) {
   page.on('pageerror', e => page.errors.push(e.message));
   await page.goto(`${GAME_URL}&lang=${lang}`);
   await page.fill('#rb-name', 'Wil');
-  if (await page.locator('#rb-fs').count()) await page.uncheck('#rb-fs');
+  await page.evaluate(() => { const f = document.getElementById('rb-fs'); if (f) f.checked = false; });
   return page;
 }
 
@@ -41,14 +41,28 @@ for (const lang of LANGS) {
     expect(await p.evaluate(() => [RB.lang, document.documentElement.lang])).toEqual([lang, lang]);
     await expect(p.locator('#rb-start')).toHaveText(await t('lobby.play'));
     expect(await misfits(p), 'lobby').toEqual([]);
+    await p.click('#rb-more summary');                                // the extra game settings
+    expect(await misfits(p), 'more settings').toEqual([]);
+    await p.click('#rb-settings-open');                               // the settings sheet
+    expect(await misfits(p), 'settings').toEqual([]);
+    await p.click('#rb-settings-close');
+    await p.click('#rb-practice-open');                               // practice: the lessons and a lesson
+    expect(await misfits(p), 'lessons').toEqual([]);
+    await p.click('[data-lesson="2"]');
+    await expect(p.locator('#rb-coach')).toBeVisible();
+    expect(await misfits(p), 'practice').toEqual([]);
+    await p.click('#rb-coach-exit');
+    await p.click('#rb-practice-back');
+    await p.click('#rb-tab-online');
+    expect(await misfits(p), 'online tab').toEqual([]);
 
-    await p.click('#rb-mp-open');                                     // public rooms + ranking
+    await p.click('#rb-tab-online'); await p.click('#rb-mp-open');                                     // public rooms + ranking
     await expect(p.locator('.rb-rcard')).toHaveCount(7);
     await expect(p.locator('.rb-rcard .name').first()).toHaveText(await t('room.name', { n: 1 }));
     expect(await misfits(p), 'public rooms').toEqual([]);
     await p.click('#rb-mp-back');
 
-    await p.click('#rb-host');                                        // first time online: the rules
+    await p.click('#rb-tab-online'); await p.click('#rb-host');                                        // first time online: the rules
     await expect(p.locator('#rb-terms')).toBeVisible();
     expect(await misfits(p), 'online rules').toEqual([]);
     await p.click('#rb-terms-ok');                                    // then the private room screen
@@ -56,8 +70,8 @@ for (const lang of LANGS) {
     expect(await misfits(p), 'room screen').toEqual([]);
     await p.click('#rb-leave');
 
-    await p.selectOption('#rb-bots', '3');                            // the game, then game over
-    await p.click('#rb-start');
+    await p.click('#rb-tab-solo'); await p.selectOption('#rb-bots', '3');                            // the game, then game over
+    await p.click('#rb-tab-solo'); await p.click('#rb-start');
     await p.waitForFunction(() => RB.current.room.running);
     await p.evaluate(() => RB.current.room.players[1].die());
     await expect(p.locator('#log')).toContainText(await t('log.out', { name: await p.evaluate(() => RB.current.room.players[1].name) }));
@@ -91,6 +105,7 @@ test('the picker switches language and remembers it', async ({ browser }) => {
   const p = await context.newPage();
   await p.goto(GAME_URL);
   await expect(p.locator('#rb-start')).toHaveText('Gegen Bots spielen');  // the phone's language
+  await p.click('#rb-settings-open');
   await p.selectOption('#rb-lang', 'pt');
   await expect(p.locator('#rb-start')).toHaveText('Jogar contra bots');
   await p.reload();
@@ -102,7 +117,7 @@ test('the picker switches language and remembers it', async ({ browser }) => {
 test('server messages arrive in the player’s language; old apps get English (room 6)', async ({ browser }) => {
   const z = await client(6, 'Zed');                                  // an app that knows no codes
   const p = await openIn(browser, 'es', { width: 393, height: 852 });
-  await p.click('#rb-mp-open');
+  await p.click('#rb-tab-online'); await p.click('#rb-mp-open');
   await p.click('.rb-join[data-room="6"]');
   await p.click('#rb-terms-ok');                                      // first time online: the rules
   await expect(p.locator('#rb-code-show')).toHaveText('Sala 6');

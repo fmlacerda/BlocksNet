@@ -99,44 +99,71 @@
   // Ranking rows carry a bit mask of every device the player has played ranked games on.
   const devIcons = mask => (mask & 1 ? devIcon('phone') : '') + (mask & 2 ? devIcon('computer') : '');
 
-  function lobbyHTML(title, subtitle) {
+  function lobbyHTML() {
     const s = Object.assign({}, DEFAULTS, store.get('settings', {}));
     s.bots = Math.max(1, Math.min(MAX_PLAYERS - 1, s.bots | 0));
     const opt = (list, cur, label = v => v) => list.map(v => `<option value="${v}" ${v === cur ? 'selected' : ''}>${label(v)}</option>`).join('');
     const fsRow = fsSupported
       ? `<label class="rb-check"><input type="checkbox" id="rb-fs" ${s.fullscreen ? 'checked' : ''}> ${t('lobby.fullscreen')}</label>`
       : (isIOS && !isStandalone() && !NATIVE ? `<p class="rb-hint rb-fs-hint">${t('lobby.iosHint')}</p>` : '');
+    const online = !!RB.net;
+    const tab = online && s.tab === 'online' ? 'online' : 'solo';
+    // The main screen: Solo and Online tabs; rarely used settings behind the gear.
     return `
       <div class="rb-overlay" id="rb-lobby">
-        <div class="rb-panel">
+        <div class="rb-panel rb-lobby-panel">
+          <button class="rb-gear" id="rb-settings-open" type="button" aria-label="${t('lobby.settings')}" title="${t('lobby.settings')}">&#9881;</button>
           <div class="rb-logo" role="img" aria-label="Rowbusters">${LOGO}</div>
           <div class="rb-tagline">${t('lobby.tagline')}</div>
-          <div class="rb-sub">${title}</div>
-          <p class="rb-hint">${subtitle}</p>
-          <label>${t('lobby.nickname')}<input id="rb-name" maxlength="12" value="${String(s.name).replace(/"/g, '')}" autocomplete="off"></label>
-          <div class="rb-row">
-            <label>${t('lobby.opponents')}<select id="rb-bots">${[1, 2, 3].map(n => `<option ${n === s.bots ? 'selected' : ''}>${n}</option>`).join('')}</select></label>
-            <label>${t('lobby.skill')}<select id="rb-skill">${opt(Object.keys(SKILLS), s.skill, k => t('skill.' + k))}</select></label>
-          </div>
-          <div class="rb-row rb-row3">
-            <label>${t('lobby.speed')}<select id="rb-speed">${opt(Object.keys(RB.SPEEDS), s.speed, k => t('speed.' + k))}</select></label>
-            <label>${t('lobby.startLevel')}<select id="rb-level">${opt(START_LEVELS, s.startLevel)}</select></label>
-            <label>${t('lobby.levelUp')}<select id="rb-lpl">${opt(LINES_PER_LEVEL, s.linesPerLevel, n => t('lobby.lines', { n }))}</select></label>
-          </div>
-          ${fsRow}
-          <div class="rb-sound-test"><button class="rb-btn-ghost" id="rb-test-sound" type="button">&#128266; ${t('lobby.testSound')}</button><span id="rb-sound-status"></span></div>
-          <p class="rb-status error" id="rb-lobby-msg"></p>
-          <button class="rb-btn-primary" id="rb-start">${t('lobby.play')}</button>
-          ${RB.net ? `<div class="rb-divider"><span>${t('lobby.or')}</span></div>
-          ${RB.net.serverURL() ? `<button class="rb-btn-primary rb-quick" id="rb-quick" type="button">&#9889; ${t('quick.btn')}</button>
-          <button class="rb-btn-secondary rb-mp-btn" id="rb-mp-open" type="button">${t('lobby.public')}</button>` : ''}
-          <div class="rb-row rb-private-row">
-            <button class="rb-btn-secondary" id="rb-host">${t(RB.net.serverURL() ? 'lobby.private' : 'lobby.host')}</button>
-            <button class="rb-btn-secondary" id="rb-join-open">${t(RB.net.serverURL() ? 'lobby.joinCode' : 'lobby.join')}</button>
+          ${online ? `<div class="rb-tabs" role="tablist">
+            <button type="button" role="tab" id="rb-tab-solo" data-tab="solo" aria-selected="${tab === 'solo'}">${t('lobby.tabSolo')}</button>
+            <button type="button" role="tab" id="rb-tab-online" data-tab="online" aria-selected="${tab === 'online'}">${t('lobby.tabOnline')}</button>
           </div>` : ''}
+          <label>${t('lobby.nickname')}<input id="rb-name" maxlength="12" value="${String(s.name).replace(/"/g, '')}" autocomplete="off"></label>
+          <div class="rb-pane${tab === 'solo' ? '' : ' hidden'}" id="rb-pane-solo" role="tabpanel">
+            <button class="rb-btn-secondary rb-practice-btn" id="rb-practice-open" type="button">&#127891; ${t('practice.btn')}<small id="rb-practice-progress"></small></button>
+            <div class="rb-row">
+              <label>${t('lobby.opponents')}<select id="rb-bots">${[1, 2, 3].map(n => `<option ${n === s.bots ? 'selected' : ''}>${n}</option>`).join('')}</select></label>
+              <label>${t('lobby.skill')}<select id="rb-skill">${opt(Object.keys(SKILLS), s.skill, k => t('skill.' + k))}</select></label>
+            </div>
+            <details class="rb-more" id="rb-more">
+              <summary><span>${t('lobby.more')}</span> <b id="rb-more-sum"></b></summary>
+              <div class="rb-row rb-row3">
+                <label>${t('lobby.speed')}<select id="rb-speed">${opt(Object.keys(RB.SPEEDS), s.speed, k => t('speed.' + k))}</select></label>
+                <label>${t('lobby.startLevel')}<select id="rb-level">${opt(START_LEVELS, s.startLevel)}</select></label>
+                <label>${t('lobby.levelUp')}<select id="rb-lpl">${opt(LINES_PER_LEVEL, s.linesPerLevel, n => t('lobby.lines', { n }))}</select></label>
+              </div>
+            </details>
+            <button class="rb-btn-primary" id="rb-start">${t('lobby.play')}</button>
+          </div>
+          ${online ? `<div class="rb-pane${tab === 'online' ? '' : ' hidden'}" id="rb-pane-online" role="tabpanel">
+            ${RB.net.serverURL() ? `<button class="rb-btn-primary rb-quick" id="rb-quick" type="button">&#9889; ${t('quick.btn')}</button>
+            <button class="rb-btn-secondary rb-mp-btn" id="rb-mp-open" type="button">${t('lobby.public')}</button>` : ''}
+            <div class="rb-row rb-private-row">
+              <button class="rb-btn-secondary" id="rb-host">${t(RB.net.serverURL() ? 'lobby.private' : 'lobby.host')}</button>
+              <button class="rb-btn-secondary" id="rb-join-open">${t(RB.net.serverURL() ? 'lobby.joinCode' : 'lobby.join')}</button>
+            </div>
+          </div>` : ''}
+          <p class="rb-status error" id="rb-lobby-msg"></p>
+        </div>
+      </div>
+      <div class="rb-overlay hidden" id="rb-settings">
+        <div class="rb-panel">
+          <div class="rb-sub">${t('lobby.settings')}</div>
           <div class="rb-lang"><label for="rb-lang">&#127760; ${t('lobby.language')}</label><select id="rb-lang">${Object.entries(RB.LANGS).map(([c, n]) => `<option value="${c}" ${c === RB.lang ? 'selected' : ''}>${n}</option>`).join('')}</select></div>
+          ${fsRow}
+          <div class="rb-sound-test"><button class="rb-btn-secondary" id="rb-test-sound" type="button">&#128266; ${t('lobby.testSound')}</button><span id="rb-sound-status"></span></div>
           <p class="rb-version">v${RB.VERSION}${RB.net ? ` · <button class="rb-linkbtn" id="rb-diag-open" type="button">${t('lobby.diag')}</button>` : ''}
             · <a class="rb-linkbtn" href="privacy.html" target="_blank">${t('lobby.privacy')}</a> · <a class="rb-linkbtn" href="terms.html" target="_blank">${t('lobby.terms')}</a></p>
+          <button class="rb-btn-primary" id="rb-settings-close" type="button">${t('close')}</button>
+        </div>
+      </div>
+      <div class="rb-overlay hidden" id="rb-practice">
+        <div class="rb-panel rb-practice-panel">
+          <div class="rb-sub">${t('practice.title')}</div>
+          <p class="rb-hint">${t('practice.intro')}</p>
+          <ol class="rb-lessons" id="rb-lessons"></ol>
+          <button class="rb-btn-ghost" id="rb-practice-back" type="button">${t('back')}</button>
         </div>
       </div>
       <div class="rb-overlay hidden" id="rb-mp">
@@ -251,7 +278,7 @@
     const room = new RB.Room();
     const app = { room, me: null, config };
     const wrap = document.createElement('div');
-    wrap.innerHTML = lobbyHTML(config.title || '', config.subtitle || '');
+    wrap.innerHTML = lobbyHTML();
     document.body.appendChild(wrap);
     const $ = id => document.getElementById(id);
 
@@ -263,7 +290,8 @@
       const startLevel = +$('rb-level').value;
       const linesPerLevel = +$('rb-lpl').value;
       const fullscreen = $('rb-fs') ? $('rb-fs').checked : DEFAULTS.fullscreen;
-      store.set('settings', { name, bots, skill, speed, startLevel, linesPerLevel, fullscreen });
+      const tab = (store.get('settings', {}) || {}).tab;
+      store.set('settings', { name, bots, skill, speed, startLevel, linesPerLevel, fullscreen, tab });
       app.fullscreen = fullscreen;
       return { name, bots, skill, game: { speed, startLevel, linesPerLevel } };
     }
@@ -283,6 +311,23 @@
       config.onSetup && config.onSetup(app);
     }
 
+    // Practice (js/practice.js): an offline game whose players the lesson adds; it then lays
+    // out the fields itself.
+    app.startPractice = (build, settings) => {
+      const { name } = readSettings();
+      room.settings = Object.assign({}, RB.DEFAULT_SETTINGS, settings);
+      room.net = null;
+      room.authority = true;
+      room.players = []; room.bots = [];
+      app.me = build(room, name);
+      config.onSetup && config.onSetup(app);
+      if (app.fullscreen) enterFullscreen(config.orientation);
+      ['rb-lobby', 'rb-end', 'rb-practice'].forEach(id => $(id).classList.add('hidden'));
+      room.quiet = true;
+      room.start();
+      room.quiet = false;
+    };
+
     function start() {
       if (app.fullscreen && !demo) enterFullscreen(config.orientation);
       $('rb-lobby').classList.add('hidden');
@@ -291,6 +336,22 @@
     }
 
     $('rb-start').addEventListener('click', () => { setup(); start(); });
+
+    // Main screen tabs (remembered), the "More" settings summary and the settings sheet.
+    function showTab(tab) {
+      document.querySelectorAll('#rb-lobby [role=tab]').forEach(b => b.setAttribute('aria-selected', String(b.dataset.tab === tab)));
+      document.querySelectorAll('#rb-lobby .rb-pane').forEach(p => p.classList.toggle('hidden', p.id !== 'rb-pane-' + tab));
+      store.set('settings', Object.assign({}, store.get('settings', {}), { tab }));
+    }
+    document.querySelectorAll('#rb-lobby [role=tab]').forEach(b => b.addEventListener('click', () => showTab(b.dataset.tab)));
+    app.showTab = showTab;
+    function moreSummary() {
+      $('rb-more-sum').textContent = t('lobby.moreSum', { speed: t('speed.' + $('rb-speed').value), level: $('rb-level').value });
+    }
+    ['rb-speed', 'rb-level'].forEach(id => $(id).addEventListener('change', moreSummary));
+    moreSummary();
+    $('rb-settings-open').addEventListener('click', () => show('rb-settings', true));
+    $('rb-settings-close').addEventListener('click', () => show('rb-settings', false));
     // Signed in: the nickname belongs to the account, so a change goes to the server (which keeps it unique).
     $('rb-name').addEventListener('change', async () => {
       if (!RB.account || !RB.account.current()) return;
@@ -950,6 +1011,7 @@
 
     room.on('end', winner => {
       if (demo) { setTimeout(start, 2500); return; }
+      if (app.practice) return;   // practice explains the result itself
       const wins = store.get('winlist', {});
       if (winner) wins[winner.name] = (wins[winner.name] || 0) + 1;
       store.set('winlist', wins);
@@ -1027,6 +1089,7 @@
     app.act = act;
     RB.current = app;   // handy from the dev console
     app.bindHold = bindHold;
+    if (RB.Practice && !demo) app.lessons = RB.Practice(app);
 
     // Keyboard (handy for desktop testing and Bluetooth keyboards on phones).
     document.addEventListener('keydown', e => {
@@ -1082,7 +1145,7 @@
     }
     function maybeUpdate() {
       if (demo || !pendingUpdate) return;
-      if (room.running || session) return;   // wait until back in the lobby
+      if (room.running || session || app.practice) return;   // wait until back in the lobby
       applyUpdate(pendingUpdate);
     }
     async function checkUpdate() {

@@ -35,7 +35,7 @@ test('several players reporting someone: muted and renamed; repeat reports do no
 
 test('blocking hides a player’s chat on this device; report buttons only in public rooms (room 2)', async ({ browser }) => {
   const p = await openGame(browser, 'Una');
-  await p.click('#rb-mp-open');
+  await p.click('#rb-tab-online'); await p.click('#rb-mp-open');
   await p.click('.rb-join[data-room="2"]');
   const mo = await client(2, 'Moe'), zed = await client(2, 'Zed');
   await p.locator('#rb-plist li[data-name="Moe"]').click();
@@ -62,13 +62,13 @@ test('Play now: online rules first, then a room; alone, the game starts with bot
   await p.clock.install();
   await p.goto(GAME_URL);
   await p.fill('#rb-name', 'Quin');
-  if (await p.locator('#rb-fs').count()) await p.uncheck('#rb-fs');
-  await p.click('#rb-quick');
+  await p.evaluate(() => { const f = document.getElementById('rb-fs'); if (f) f.checked = false; });
+  await p.click('#rb-tab-online'); await p.click('#rb-quick');
   await expect(p.locator('#rb-terms')).toBeVisible();                 // first time: the rules
   await p.click('#rb-terms-no');
   await expect(p.locator('#rb-terms')).toBeHidden();
   await expect(p.locator('#rb-lobby')).toBeVisible();                 // "Not now": still in the lobby
-  await p.click('#rb-quick');
+  await p.click('#rb-tab-online'); await p.click('#rb-quick');
   await p.click('#rb-terms-ok');
   await expect(p.locator('#rb-code-show')).toHaveText('Room 1');
   await expect(p.locator('#rb-on-status')).toContainText('Starting with bots');

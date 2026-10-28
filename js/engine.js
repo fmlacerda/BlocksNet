@@ -487,6 +487,7 @@
       this.authority = true;    // decides when the game ends (offline or host)
       this.syncTimer = 0;
       this.lastSync = {};
+      this.quiet = false;
     }
 
     on(ev, fn) { (this.listeners[ev] = this.listeners[ev] || []).push(fn); return this; }
@@ -527,7 +528,7 @@
       this.elapsed = 0;
       this.winner = null;
       this.lastSync = {};
-      this.log(t('log.started'), 'system');
+      if (!this.quiet) this.log(t('log.started'), 'system');   // practice lessons start quietly
       if (this.mode.desc && !this.mode.teams) this.log(t('log.mode', { label: t('mode.' + this.settings.mode), desc: t('mode.' + this.settings.mode + '.desc') }), 'system');
       this.emit('start');
     }
@@ -665,7 +666,7 @@
   }
 
   global.RB = Object.assign(global.RB || {}, {
-    VERSION: '2026.10.28e',   // keep in sync with version.json (used for auto-update)
+    VERSION: '2026.10.28f',   // keep in sync with version.json (used for auto-update)
     W, H, MAX_INV, COLORS, SHAPES, SPECIAL_INFO, SPECIAL_FREQ, SPEEDS, MODES, DEFAULT_SETTINGS,
     Room, Player, BotBrain, pieceCells, isSpecial, encodeField, decodeField,
   });

@@ -14,7 +14,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bungee&family=Space+Grotesk:wght@400;500;600;700&display=swap">
-<link rel="stylesheet" href="css/common.css?v=20261028e">
+<link rel="stylesheet" href="css/common.css?v=20261028f">
 <style>
   /* Portrait layout for up to 4 players: a slim status line on top so the playfield gets
      the space, your field on the left, the 3 opponents stacked on the right, special bar and
@@ -100,6 +100,17 @@
   .pad .drop { background: linear-gradient(#FF2E88, #C41866); border-color: #FF8AC0; color: #fff; }
   .pad .rot { background: linear-gradient(#C6FF3D, #8FC71C); border-color: #E2FF9A; color: var(--ink); font-size: 30px; }
 
+  /* Practice: one instruction at a time above the fields. */
+  .coach { flex: none; display: flex; align-items: center; gap: 8px; margin: 5px 6px 0; padding: 8px 10px; background: var(--panel-2); border: 1px solid var(--accent); border-radius: 10px; }
+  .coach.hidden { display: none; }
+  .coach p { flex: 1; min-width: 0; font: 500 13.5px/1.35 var(--font); color: var(--text); }
+  .coach p b { color: var(--accent); }
+  .coach-btns { flex: none; display: flex; flex-direction: column; gap: 6px; }
+  .coach-btns button { padding: 7px 10px; border-radius: 9px; font: 700 13px var(--font); color: var(--dim); border: 1px solid var(--line-2); touch-action: manipulation; }
+  .coach-btns .next { background: var(--accent); border-color: var(--accent); color: var(--ink); }
+  .coach-btns .hidden { display: none; }
+  body.practicing #partyBtn { visibility: hidden; }
+
   /* Partyline sheet */
   .party { position: fixed; inset: auto 0 0 0; z-index: 40; height: 55dvh; background: var(--panel); border-top: 1px solid var(--line); border-radius: 16px 16px 0 0; display: flex; flex-direction: column; padding: 10px 12px calc(10px + var(--safe-b)); transform: translateY(105%); transition: transform .25s; }
   .party.open { transform: none; }
@@ -165,6 +176,14 @@
     <button class="chat" id="partyBtn" aria-label="Partyline chat" data-i18n-aria="aria.party">&#128172;</button>
   </div>
 
+  <div class="coach hidden" id="rb-coach" aria-live="polite">
+    <p id="rb-coach-text"></p>
+    <div class="coach-btns">
+      <button id="rb-coach-exit" type="button" data-i18n="practice.lessons">Lessons</button>
+      <button id="rb-coach-next" class="next hidden" type="button" data-i18n="practice.next">Next</button>
+    </div>
+  </div>
+
   <div class="main">
     <div class="left">
       <div class="me"><canvas id="meCanvas"></canvas></div>
@@ -198,21 +217,22 @@
     <form id="chatForm"><input id="chatIn" placeholder="Say something…" data-i18n-ph="chat.placeholder" autocomplete="off"><button data-i18n="chat.send">Send</button></form>
   </div>
 
-<script src="js/i18n.js?v=20261028e"></script>
-<script src="js/i18n/en.js?v=20261028e"></script>
-<script src="js/i18n/es.js?v=20261028e"></script>
-<script src="js/i18n/pt.js?v=20261028e"></script>
-<script src="js/i18n/fr.js?v=20261028e"></script>
-<script src="js/i18n/de.js?v=20261028e"></script>
-<script src="js/engine.js?v=20261028e"></script>
-<script src="js/render.js?v=20261028e"></script>
-<script src="js/vendor/peerjs.min.js?v=20261028e"></script>
-<script src="js/config.js?v=20261028e"></script>
-<script src="js/net.js?v=20261028e"></script>
-<script src="js/account.js?v=20261028e"></script>
-<script src="js/sound.js?v=20261028e"></script>
-<script src="js/statsimage.js?v=20261028e"></script>
-<script src="js/app.js?v=20261028e"></script>
+<script src="js/i18n.js?v=20261028f"></script>
+<script src="js/i18n/en.js?v=20261028f"></script>
+<script src="js/i18n/es.js?v=20261028f"></script>
+<script src="js/i18n/pt.js?v=20261028f"></script>
+<script src="js/i18n/fr.js?v=20261028f"></script>
+<script src="js/i18n/de.js?v=20261028f"></script>
+<script src="js/engine.js?v=20261028f"></script>
+<script src="js/render.js?v=20261028f"></script>
+<script src="js/vendor/peerjs.min.js?v=20261028f"></script>
+<script src="js/config.js?v=20261028f"></script>
+<script src="js/net.js?v=20261028f"></script>
+<script src="js/account.js?v=20261028f"></script>
+<script src="js/sound.js?v=20261028f"></script>
+<script src="js/statsimage.js?v=20261028f"></script>
+<script src="js/practice.js?v=20261028f"></script>
+<script src="js/app.js?v=20261028f"></script>
 <script>
 (function () {
   const R = RB.render;
@@ -309,9 +329,7 @@
   }
 
   const app = RB.app({
-    title: RB.t('lobby.title'),
     orientation: 'portrait',
-    subtitle: RB.t('lobby.help'),
     onSetup: buildOpps,
     render(app) {
       const me = app.me;
