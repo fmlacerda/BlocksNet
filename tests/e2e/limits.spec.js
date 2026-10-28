@@ -72,7 +72,7 @@ test('crash reports reach the server, without personal data', async ({ browser }
 test('an outdated web game updates itself when the server turns it away', async ({ browser }) => {
   const p = await openGame(browser, 'Upd');
   await p.evaluate(() => { RB.VERSION = '2026.01.01a'; });          // pretend to be an old copy
-  await p.click('#rb-mp-open');
+  await p.click('#rb-tab-online'); await p.click('#rb-mp-open');
   await p.click('.rb-join[data-room="4"]');
   await p.waitForURL(url => url.searchParams.get('v') === require('../../version.json').version.toString() || /[?&]v=/.test(url.search), { timeout: 10000 }).catch(() => {});
   expect(new URL(p.url()).searchParams.get('v')).toBe(VERSION);    // reloaded onto the current version

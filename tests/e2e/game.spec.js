@@ -18,7 +18,7 @@ test('lobby loads with the Rowbusters brand and no errors @webkit', async ({ bro
 test('offline game against bots runs and ends with the game-over screen @webkit', async ({ browser }) => {
   const p = await openGame(browser, 'Solo');
   await p.selectOption('#rb-bots', '2');
-  await p.click('#rb-start');
+  await p.click('#rb-tab-solo'); await p.click('#rb-start');
   await p.waitForFunction(() => RB.current.room.running);
   await p.waitForTimeout(1500);
   await p.evaluate(() => { for (const pl of RB.current.room.players) if (pl !== RB.current.me) pl.die(); });
@@ -120,7 +120,7 @@ test('joining during a game: watch it, then play the next one (room 2)', async (
   const a = await openGame(browser, 'Ari'), b = await openGame(browser, 'Bel'), late = await openGame(browser, 'Lou');
   await joinPublicRoom(a, 2); await joinPublicRoom(b, 2);
   await hostStart(a, 0, [b]);
-  await late.click('#rb-mp-open');
+  await late.click('#rb-tab-online'); await late.click('#rb-mp-open');
   await expect(late.locator('.rb-join[data-room="2"]')).toContainText('watch now');
   await late.click('.rb-join[data-room="2"]');
   await expect(late.locator('.watchbar')).toBeVisible();
@@ -167,7 +167,7 @@ test('teams room: pick a team, partner marked in the game (room 3)', async ({ br
 
 test('room modes are shown, and a short connection drop does not end the game (rooms 5, 7)', async ({ browser }) => {
   const a = await openGame(browser, 'Kai');
-  await a.click('#rb-mp-open');
+  await a.click('#rb-tab-online'); await a.click('#rb-mp-open');
   await expect(a.locator('.rb-rcard').nth(4).locator('.rb-rmode')).toContainText('SNS');
   await expect(a.locator('.rb-rcard').nth(5).locator('.rb-rmode')).toContainText('Fast');
   await expect(a.locator('.rb-rcard').nth(6).locator('.rb-rmode')).toContainText('Pure');
@@ -203,13 +203,81 @@ test('phones: tapping an opponent fires a special, even right after a button pre
 
 test('muted players never start audio; switching sound on starts it', async ({ browser }) => {
   const p = await openGame(browser, 'Hush');
-  await p.click('#rb-start');
+  await p.click('#rb-tab-solo'); await p.click('#rb-start');
   await p.waitForFunction(() => RB.current.room.running);
   await p.click('#bDrop');
   expect(await p.evaluate(() => RB.sound._ctx())).toBeNull();
   await p.click('#muteBtn');
   expect(await p.evaluate(() => RB.sound.muted)).toBe(false);
   expect(await p.evaluate(() => !!RB.sound._ctx())).toBe(true);
+  expect(p.errors).toEqual([]);
+  await p.context().close();
+});
+
+test('main screen: Solo and Online tabs (remembered), settings behind the gear @webkit', async ({ browser }) => {
+  const p = await openGame(browser, 'Tabs', { ...devices['iPhone 13'] });
+  await expect(p.locator('#rb-start')).toBeVisible();                // Solo first
+  await expect(p.locator('#rb-quick')).toBeHidden();
+  await p.click('#rb-tab-online');
+  await expect(p.locator('#rb-quick')).toBeVisible();
+  await expect(p.locator('#rb-start')).toBeHidden();
+  await expect(p.locator('#rb-lang')).toBeHidden();                  // language, sound, links: in settings
+  await p.click('#rb-settings-open');
+  await expect(p.locator('#rb-lang')).toBeVisible();
+  await expect(p.locator('#rb-test-sound')).toBeVisible();
+  await p.click('#rb-settings-close');
+  await p.reload();
+  await expect(p.locator('#rb-tab-online')).toHaveAttribute('aria-selected', 'true');
+  await expect(p.locator('#rb-quick')).toBeVisible();
+  expect(p.errors).toEqual([]);
+  await p.context().close();
+});
+
+test('practice: lessons teach the controls and each special, and are remembered @webkit', async ({ browser }) => {
+  const p = await openGame(browser, 'Pupil', { ...devices['iPhone 13'] });
+  const L = () => p.evaluate(() => { const l = RB.current.lessons.current(); return l && { id: l.lesson.id, step: l.step, over: l.over }; });
+  await expect(p.locator('#rb-practice-progress')).toContainText('New?');
+  await p.click('#rb-practice-open');
+  await expect(p.locator('#rb-lessons li')).toHaveCount(13);
+  await p.click('[data-lesson="0"]');                                // move, turn and drop: fill the gap
+  await expect(p.locator('#rb-coach')).toBeVisible();
+  for (let i = 0; i < 6; i++) await p.tap('#bR');
+  await p.tap('#bDrop');
+  await expect(p.locator('#rb-coach-next')).toBeVisible();
+  expect(await L()).toEqual({ id: 'move', step: 1, over: true });
+  await expect.poll(() => p.evaluate(() => RB.current.me.piece)).toBeNull();   // nothing falls during the explanation
+  await p.click('#rb-coach-next');                                   // collect the c
+  for (let i = 0; i < 6; i++) await p.tap('#bR');
+  await p.tap('#bDrop');
+  await expect(p.locator('#rb-coach-next')).toBeVisible();
+  expect(await p.evaluate(() => RB.current.me.inv)).toEqual(['c']);
+  await p.click('#rb-coach-next');                                   // fire, use on yourself, throw away
+  await p.tap('.opp >> nth=0');
+  await p.tap('#targets .t >> nth=0');
+  await p.tap('#targets .t >> nth=2');
+  await expect(p.locator('#rb-coach-next')).toBeVisible();
+  await p.click('#rb-coach-next');                                   // Clear Line: on yourself, not on Dummy
+  await p.tap('.opp >> nth=0');
+  await expect(p.locator('#rb-coach-text')).toContainText('Not quite');
+  expect(await p.evaluate(() => RB.current.me.inv)).toEqual(['c']);  // set up again
+  await p.tap('#targets .t >> nth=0');
+  expect(await L()).toEqual({ id: 'c', step: 1, over: true });
+  await p.click('#rb-coach-exit');                                   // back to the list: 4 ticked
+  await expect(p.locator('#rb-lessons em')).toHaveCount(4);
+  await p.click('[data-lesson="9"]');                                // Block Bomb: Dummy's o blocks explode
+  expect(await p.evaluate(() => RB.current.room.players[1].field.flat().filter(v => v === 'o').length)).toBe(2);
+  await p.tap('.opp >> nth=0');
+  expect(await p.evaluate(() => RB.current.room.players[1].field.flat().filter(v => v === 'o').length)).toBe(0);
+  await expect(p.locator('#rb-coach-next')).toBeVisible();
+  await p.click('#rb-coach-exit');
+  await p.click('[data-lesson="12"]');                               // the final game: a real bot
+  expect(await p.evaluate(() => RB.current.room.bots.length)).toBe(1);
+  await p.evaluate(() => RB.current.room.players[1].die());
+  await expect(p.locator('#rb-coach-text')).toContainText('You won');
+  await expect(p.locator('#rb-end')).toBeHidden();                   // practice explains the result itself
+  await p.click('#rb-coach-next');
+  await p.click('#rb-practice-back');
+  await expect(p.locator('#rb-practice-progress')).toContainText('6 of 13');
   expect(p.errors).toEqual([]);
   await p.context().close();
 });

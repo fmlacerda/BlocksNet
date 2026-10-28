@@ -9,7 +9,8 @@ The owner is not a developer: explain outcomes in plain words, and ask before an
 - `index.html` the game page (portrait layout, controls, render loop). No build step: plain HTML/JS/canvas.
 - `js/engine.js` rules (Room, Player, BotBrain, modes) · `js/render.js` canvas drawing ·
   `js/net.js` online play (public rooms over WebSocket, private rooms over PeerJS) ·
-  `js/app.js` screens (lobby, rooms, Partyline, stats, summary) · `js/statsimage.js` summary as PNG ·
+  `js/app.js` screens (lobby with Solo/Online tabs, rooms, Partyline, stats, summary) ·
+  `js/practice.js` practice lessons (controls and each special, with a still "Dummy") · `js/statsimage.js` summary as PNG ·
   `js/sound.js` synthesised sounds · `js/config.js` server address ·
   `js/i18n.js` + `js/i18n/{en,es,pt,fr,de}.js` the texts in five languages (`RB.t('key', {params})`).
 - `server/worker.js` Cloudflare Worker + one Durable Object (`Hub`, SQLite): 7 public rooms

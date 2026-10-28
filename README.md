@@ -100,6 +100,7 @@ js/i18n/       the texts, one file per language (en.js is the source)
 js/engine.js   rules: Player, Room (routes lines/specials), BotBrain
 js/render.js   canvas drawing: fields, next piece, special bar
 js/sound.js    synthesised sound effects (Web Audio)
+js/practice.js practice lessons: the controls and what each special does
 js/account.js  optional sign-in (Apple, Google, Microsoft), sign out, delete account
 js/net.js      online rooms: PeerJS / same-browser transports, host relay, room codes, invites
 js/statsimage.js  game summary drawn as a PNG for "Copy image"

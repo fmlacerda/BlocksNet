@@ -88,7 +88,7 @@ test('in the game: the button leaves for the provider asking for no email; back 
   const p = await openGame(browser, 'Dee');
   let asked = null;
   await p.context().route('https://accounts.google.com/**', route => { asked = new URL(route.request().url()); return route.fulfill({ body: 'provider page' }); });
-  await p.click('#rb-mp-open');
+  await p.click('#rb-tab-online'); await p.click('#rb-mp-open');
   const btn = p.locator('.rb-sso-google');
   await expect(p.locator('.rb-sso')).toHaveText(['Apple', 'Google', 'Microsoft']);   // compact: logo + name…
   await expect(btn).toHaveAttribute('aria-label', 'Continue with Google');           // …the full wording is the label
@@ -156,7 +156,7 @@ test('nicknames are unique: guests get a variant, accounts own theirs on every d
 
 test('in the game: a guest whose nickname is taken is told, and plays under the variant (room 7)', async ({ browser }) => {
   const p = await openGame(browser, 'Nena');                        // the account above owns "Nena"
-  await p.click('#rb-mp-open');
+  await p.click('#rb-tab-online'); await p.click('#rb-mp-open');
   await p.click('.rb-join[data-room="7"]');
   await expect(p.locator('#rb-chat')).toContainText('“Nena” is already taken, so you play as Nena2');
   await expect(p.locator('#rb-plist')).toContainText('Nena2');

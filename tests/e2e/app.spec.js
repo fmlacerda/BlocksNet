@@ -68,7 +68,7 @@ test('the app copy: Apple sign-in sheet, haptics, no Home Screen tip @webkit', a
   await expect(p.locator('#rb-fs')).toHaveCount(0);                  // so no web full screen either
 
   await p.fill('#rb-name', 'Ida');
-  await p.click('#rb-mp-open');
+  await p.click('#rb-tab-online'); await p.click('#rb-mp-open');
   await expect(p.locator('.rb-sso')).toHaveCount(3);                 // Apple, Google, Microsoft
   await expect(p.locator('.rb-sso').first()).toHaveClass(/rb-sso-apple/);
   await p.click('.rb-sso-apple');
@@ -79,7 +79,7 @@ test('the app copy: Apple sign-in sheet, haptics, no Home Screen tip @webkit', a
   expect(asked.options.scopes).toBeUndefined();                      // no name, no email
   await p.click('#rb-mp-back');
 
-  await p.click('#rb-start');                                        // a game: tapping an opponent buzzes
+  await p.click('#rb-tab-solo'); await p.click('#rb-start');                                        // a game: tapping an opponent buzzes
   await p.waitForFunction(() => RB.current.room.running);
   expect(await p.evaluate(() => !!document.fullscreenElement)).toBe(false);
   await p.evaluate(() => { RB.current.me.inv = ['c']; });
@@ -100,7 +100,7 @@ test('the app copy: Google and Microsoft sign in through the web sign-in sheet @
   await p.fill('#rb-name', 'Ida');
   for (const provider of ['google', 'microsoft']) {
     await p.evaluate(() => { try { localStorage.removeItem('rb.account'); } catch (e) { /* no storage */ } });
-    await p.click('#rb-mp-open');
+    await p.click('#rb-tab-online'); await p.click('#rb-mp-open');
     await p.click(`.rb-sso-${provider}`);
     await expect(p.locator('#rb-mp-msg')).toContainText('Signed in');
     const call = await p.evaluate(() => window.nativeCalls.filter(c => c.plugin === 'WebSignIn').pop());

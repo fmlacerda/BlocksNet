@@ -324,3 +324,28 @@ button { font: inherit; color: inherit; border: 0; background: none; cursor: poi
 .rb-psheet .rb-sub { font-size: 15px; letter-spacing: .04em; text-transform: none; }
 #rb-plist li.rb-other { cursor: pointer; }
 #rb-plist li.blocked { opacity: .55; text-decoration: line-through; }
+
+/* ---------- main screen: Solo / Online tabs, settings gear, practice */
+.rb-lobby-panel { position: relative; }
+.rb-gear { position: absolute; top: 8px; right: 8px; width: 40px; height: 40px; border-radius: 12px; font-size: 22px; color: var(--soft); touch-action: manipulation; }
+.rb-tabs { display: flex; padding: 4px; background: var(--well); border: 1px solid var(--line); border-radius: 14px; }
+.rb-tabs button { flex: 1; padding: 10px 4px; border-radius: 10px; font: 700 15px var(--font); color: var(--dim); touch-action: manipulation; }
+.rb-tabs button[aria-selected="true"] { background: var(--accent); color: var(--ink); }
+.rb-pane { display: flex; flex-direction: column; gap: 12px; }
+.rb-pane.hidden { display: none; }
+.rb-more summary { display: flex; align-items: center; gap: 6px; padding: 11px 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--panel-2); color: var(--dim); font-size: 13px; cursor: pointer; list-style: none; }
+.rb-more summary::-webkit-details-marker { display: none; }
+.rb-more summary b { color: var(--text); font-weight: 600; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rb-more summary::after { content: "▾"; color: var(--dim); }
+.rb-more[open] summary::after { content: "▴"; }
+.rb-more .rb-row { margin-top: 10px; }
+.rb-practice-btn { display: flex; flex-direction: column; align-items: center; gap: 2px; }
+.rb-practice-btn small { font-size: 11px; font-weight: 500; color: var(--dim); }
+.rb-practice-btn small:empty { display: none; }
+.rb-lessons { list-style: none; display: flex; flex-direction: column; gap: 6px; }
+.rb-lessons button { width: 100%; display: flex; align-items: center; gap: 10px; text-align: left; padding: 10px 12px; border-radius: 10px; background: var(--row); border: 1px solid var(--line); color: var(--text); font-size: 14px; touch-action: manipulation; }
+.rb-lessons button i { flex: none; width: 24px; height: 24px; display: grid; place-items: center; border-radius: 6px; font: 700 14px "Courier New", monospace; font-style: normal; background: #14161c; border: 2px solid var(--line-2); }
+.rb-lessons button span { flex: 1; min-width: 0; }
+.rb-lessons button em { font-style: normal; color: var(--accent); font-weight: 700; }
+.rb-lessons small { display: block; color: var(--dim); font-size: 12px; }
+.rb-practice-panel { max-height: 100%; }

@@ -70,7 +70,7 @@ async function openGame(browser, name, contextOpts = {}) {
   page.on('pageerror', e => page.errors.push(e.message));
   await page.goto(GAME_URL);
   await page.fill('#rb-name', name);
-  if (await page.locator('#rb-fs').count()) await page.uncheck('#rb-fs');
+  await page.evaluate(() => { const f = document.getElementById('rb-fs'); if (f) f.checked = false; });
   return page;
 }
 
@@ -81,7 +81,7 @@ async function muteSound(context) {
 }
 
 async function joinPublicRoom(page, n, { watch = false } = {}) {
-  await page.click('#rb-mp-open');
+  await page.click('#rb-tab-online'); await page.click('#rb-mp-open');
   const btn = page.locator(`.rb-join[data-room="${n}"]${watch ? '[data-watch]' : ''}`);
   await btn.click();
   await expect(page.locator('#rb-on-room')).toBeVisible();
