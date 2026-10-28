@@ -21,6 +21,7 @@ The owner is not a developer: explain outcomes in plain words, and ask before an
   `wrangler.jsonc` deploys it and serves the game files (minus `.assetsignore`).
 - `ios/` the iPhone app (Capacitor 8, Swift Package Manager): `npm run app:sync` copies the game into it
   (`tools/build-www.js` → `www/`, both generated). Native-only code checks `Capacitor.isNativePlatform()`.
+  `ios/WebSignIn` is a local plugin: Google/Microsoft sign-in in the app via Apple's web sign-in sheet.
   `.github/workflows/ios.yml` builds and sends it to TestFlight (run by hand; secrets in GitHub settings).
 - `tests/unit` game rules (node --test) · `tests/e2e` server + browser tests (Playwright).
 

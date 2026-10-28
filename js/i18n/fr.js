@@ -217,7 +217,7 @@
   'net.reaching': 'Connexion au serveur de connexion…',
   'net.creating': 'Création du salon…',
   'net.signalRetry': 'Reconnexion au serveur de connexion… les nouveaux joueurs ne pourront peut-être pas entrer pendant un instant.',
-  'srv.otherVersion': 'Ce salon utilise une autre version de Rowbusters. Recharge la page sur les deux téléphones.',
+  'srv.otherVersion': 'Ce salon utilise une autre version de Rowbusters. Mets à jour ou recharge Rowbusters sur les deux téléphones.',
   'srv.full': 'Le salon est complet ({n} joueurs).',
   'net.codeLength': 'Les codes de salon ont 5 lettres ou chiffres.',
   'net.connecting': 'Connexion au salon {code}…',

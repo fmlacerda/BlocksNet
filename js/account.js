@@ -15,9 +15,21 @@
       client_id: id, redirect_uri: back, response_type: 'id_token', response_mode: 'fragment', scope: 'openid', nonce, state, prompt: 'select_account' }),
   };
   const PROVIDERS = Object.keys(AUTH);
-  // Inside the iPhone app (Capacitor) Apple signs in natively; the web page flows of Google and
-  // Microsoft can't return to the app yet, so the app offers Apple only.
+  // Inside the iPhone app (Capacitor) Apple signs in natively. Google and Microsoft open their
+  // pages in Apple's sign-in sheet; they return to rowbusters.com (the address registered with
+  // them), which hands the answer on to the app's rowbusters:// address (see below).
   const NATIVE = !!(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform());
+  const APP_HOME = 'https://rowbusters.com/';
+  const APP_SCHEME = 'rowbusters';
+  const APP_STATE = 'app.';
+  // On rowbusters.com: a provider's answer to a sign-in started in the app goes back to the app.
+  // Only the app's sign-in sheet, which started it (and checks state and nonce), receives it.
+  if (!NATIVE) {
+    const h = new URLSearchParams(location.hash.slice(1));
+    if ((h.has('id_token') || h.has('error')) && (h.get('state') || '').startsWith(APP_STATE)) {
+      location.replace(`${APP_SCHEME}://signin#${location.hash.slice(1)}`);
+    }
+  }
 
   const rand = () => [...crypto.getRandomValues(new Uint8Array(16))].map(b => b.toString(16).padStart(2, '0')).join('');
   const get = (k, store = localStorage) => { try { return JSON.parse(store.getItem(k) || 'null'); } catch (e) { return null; } };
@@ -56,10 +68,10 @@
     // Which providers the server has switched on.
     async providers() {
       if (!config) config = await fetch(RB.net.serverURL() + '/auth/config', { cache: 'no-store' }).then(r => r.json()).catch(() => ({}));
-      return PROVIDERS.filter(p => config[p] && (!NATIVE || p === 'apple'));
+      return PROVIDERS.filter(p => config[p]);
     },
     // Leaves for the provider's sign-in page; the game reopens afterwards and finish() completes it.
-    // In the app, Apple's own sign-in sheet opens instead, and this resolves like finish().
+    // In the app, a sign-in sheet opens instead, and this resolves like finish().
     async start(provider) {
       await account.providers();
       if (NATIVE && provider === 'apple') {
@@ -70,6 +82,18 @@
           return await complete(provider, r.response.identityToken, nonce);
         } catch (e) { return { error: /cancel|1001/i.test(String(e && (e.message || e.code))) ? 'cancelled' : 'failed' }; }
       }
+      if (NATIVE) {
+        const nonce = rand(), state = APP_STATE + rand();
+        let back;
+        try {
+          const WebSignIn = window.Capacitor.Plugins.WebSignIn || window.Capacitor.registerPlugin('WebSignIn');
+          back = (await WebSignIn.open({ url: AUTH[provider](config[provider], APP_HOME, nonce, state), callbackScheme: APP_SCHEME })).url;
+        } catch (e) { return { error: /cancel/i.test(String(e && (e.message || e.code))) ? 'cancelled' : 'failed' }; }
+        const h = new URLSearchParams(back.slice(back.indexOf('#') + 1));
+        if (h.get('state') !== state) return { error: 'expired' };
+        if (h.has('error')) return { error: /access_denied|cancel/.test(h.get('error')) ? 'cancelled' : 'failed' };
+        return complete(provider, h.get('id_token'), nonce);
+      }
       const nonce = rand(), state = rand();
       set('rb.signin', { provider, nonce, state, back: location.search }, sessionStorage);
       location.assign(AUTH[provider](config[provider], location.origin + location.pathname, nonce, state));
@@ -79,6 +103,7 @@
     async finish() {
       const h = new URLSearchParams(location.hash.slice(1));
       if (!h.has('id_token') && !h.has('error')) return null;
+      if (!NATIVE && (h.get('state') || '').startsWith(APP_STATE)) return null;   // on its way to the app
       const pending = get('rb.signin', sessionStorage);
       set('rb.signin', null, sessionStorage);
       // Take the token out of the address bar (and put back the page's own options).

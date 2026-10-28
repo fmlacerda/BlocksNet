@@ -217,7 +217,7 @@
   'net.reaching': 'Acessando o servidor de conexão…',
   'net.creating': 'Criando a sala…',
   'net.signalRetry': 'Reconectando ao servidor de conexão… novos jogadores talvez não consigam entrar por um momento.',
-  'srv.otherVersion': 'Esta sala usa outra versão do Rowbusters. Recarregue a página nos dois celulares.',
+  'srv.otherVersion': 'Esta sala usa outra versão do Rowbusters. Atualize ou recarregue o Rowbusters nos dois celulares.',
   'srv.full': 'A sala está cheia ({n} jogadores).',
   'net.codeLength': 'Os códigos de sala têm 5 letras ou números.',
   'net.connecting': 'Conectando à sala {code}…',
