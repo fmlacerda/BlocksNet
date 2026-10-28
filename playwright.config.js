@@ -37,7 +37,10 @@ module.exports = defineConfig({
   projects: [
     { name: 'chromium', use: { ...devices['Desktop Chrome'] } },
     // Safari's engine: run on CI (GitHub installs it); this sandbox only has Chromium.
-    ...(process.env.CI ? [{ name: 'webkit', use: { ...devices['Desktop Safari'] }, grep: /@webkit/ }] : []),
+    // CI machines have no graphics chip, and the Linux build of Safari's engine crashed now and
+    // then drawing through the software GPU driver ("Target crashed"); it draws on the CPU here.
+    ...(process.env.CI ? [{ name: 'webkit', use: { ...devices['Desktop Safari'],
+      launchOptions: { env: { ...process.env, WEBKIT_SKIA_ENABLE_CPU_RENDERING: '1' } } }, grep: /@webkit/ }] : []),
   ],
   webServer: {
     command: `rm -rf "${STATE}" && npx wrangler dev --port 8787 --ip 127.0.0.1 --persist-to "${STATE}" --var AUTH_TEST_JWKS:${TEST_JWKS} --var GOOGLE_CLIENT_ID:test-google-client --var APPLE_CLIENT_IDS:test-apple-client --var MICROSOFT_CLIENT_ID:test-microsoft-client`,
