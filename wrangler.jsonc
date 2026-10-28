@@ -27,7 +27,7 @@
   // hidden. APPLE_CLIENT_IDS: the Services ID for the web, then the app's bundle id.
   "vars": {
     "APPLE_CLIENT_IDS": "com.rowbusters.web,com.rowbusters.app",
-    "GOOGLE_CLIENT_ID": "",
+    "GOOGLE_CLIENT_ID": "360016718949-oa1b23bq0krbauk2tv91nepvhdmtgt8d.apps.googleusercontent.com",
     "MICROSOFT_CLIENT_ID": "64f313de-5c79-4191-b64c-3282a9a41f97"
   },
   // Previews: every pull request gets its own copy at a workers.dev address (Cloudflare runs

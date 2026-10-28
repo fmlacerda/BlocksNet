@@ -106,3 +106,16 @@ test('version numbers are in sync (engine, version.json, server, index.html cach
   assert.ok(tags.length >= 8, 'index.html has cache tags');
   for (const t of tags) assert.equal(t, tag, 'every ?v= tag matches the version');
 });
+
+test('one failing listener does not stop the others (the game-over screen still shows)', async () => {
+  const r = new RB.Room();
+  const ran = [];
+  r.on('end', () => { throw new Error('a broken listener'); });
+  r.on('end', () => ran.push('game over screen'));
+  // The error is rethrown on its own (to reach the crash reports): catch that here.
+  const later = [], timer = global.setTimeout;
+  global.setTimeout = fn => later.push(fn);
+  try { r.emit('end', null); } finally { global.setTimeout = timer; }
+  assert.deepEqual(ran, ['game over screen']);
+  assert.throws(later[0], /a broken listener/, 'the error is still reported');
+});

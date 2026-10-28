@@ -62,6 +62,8 @@ for (const lang of LANGS) {
     await expect(p.locator('#log')).toContainText(await t('log.out', { name: await p.evaluate(() => RB.current.room.players[1].name) }));
     expect(await misfits(p), 'game screen').toEqual([]);
     await p.evaluate(() => { for (const pl of RB.current.room.players) if (pl !== RB.current.me) pl.die(); });
+    expect(await p.evaluate(() => RB.current.room.running), 'game ended').toBe(false);
+    expect(p.errors, 'no errors while ending the game').toEqual([]);
     await expect(p.locator('#rb-end')).toBeVisible();
     await expect(p.locator('#rb-again')).toHaveText(await t('end.again'));
     expect(await misfits(p), 'game over').toEqual([]);

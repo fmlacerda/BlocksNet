@@ -90,8 +90,9 @@ test('in the game: the button leaves for the provider asking for no email; back 
   await p.context().route('https://accounts.google.com/**', route => { asked = new URL(route.request().url()); return route.fulfill({ body: 'provider page' }); });
   await p.click('#rb-mp-open');
   const btn = p.locator('.rb-sso-google');
-  await expect(btn).toHaveText('Continue with Google');
-  await expect(p.locator('.rb-sso')).toHaveText(['Continue with Apple', 'Continue with Google', 'Continue with Microsoft (Hotmail, Outlook)']);
+  await expect(p.locator('.rb-sso')).toHaveText(['Apple', 'Google', 'Microsoft']);   // compact: logo + name…
+  await expect(btn).toHaveAttribute('aria-label', 'Continue with Google');           // …the full wording is the label
+  await expect(p.locator('.rb-sso-microsoft')).toHaveAttribute('aria-label', 'Continue with Microsoft (Hotmail, Outlook)');
   await btn.click();
   await expect.poll(() => asked && asked.hostname).toBe('accounts.google.com');
   expect(Object.fromEntries(asked.searchParams)).toMatchObject({ client_id: 'test-google-client', response_type: 'id_token', scope: 'openid' });

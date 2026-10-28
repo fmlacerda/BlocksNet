@@ -490,7 +490,13 @@
     }
 
     on(ev, fn) { (this.listeners[ev] = this.listeners[ev] || []).push(fn); return this; }
-    emit(ev, data) { (this.listeners[ev] || []).forEach(fn => fn(data)); }
+    // One listener failing (sound, log, screen) must not stop the others, e.g. the game-over screen.
+    // The error is rethrown on its own so it still reaches the crash reports.
+    emit(ev, data) {
+      for (const fn of this.listeners[ev] || []) {
+        try { fn(data); } catch (e) { setTimeout(() => { throw e; }, 0); }
+      }
+    }
 
     addPlayer(name, opts = {}) {
       const p = new Player(this, opts.slot || this.players.length + 1, name, opts);
@@ -659,7 +665,7 @@
   }
 
   global.RB = Object.assign(global.RB || {}, {
-    VERSION: '2026.10.28a',   // keep in sync with version.json (used for auto-update)
+    VERSION: '2026.10.28b',   // keep in sync with version.json (used for auto-update)
     W, H, MAX_INV, COLORS, SHAPES, SPECIAL_INFO, SPECIAL_FREQ, SPEEDS, MODES, DEFAULT_SETTINGS,
     Room, Player, BotBrain, pieceCells, isSpecial, encodeField, decodeField,
   });
