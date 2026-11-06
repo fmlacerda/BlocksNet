@@ -1015,7 +1015,7 @@
     function reportPlayed(kind, ms, host = false) {
       if (demo || !RB.net || !RB.net.serverURL()) return;
       try {
-        fetch(RB.net.serverURL() + '/stats/played', { method: 'POST', keepalive: true, headers: { 'Content-Type': 'application/json' },
+        fetch(RB.net.serverURL() + '/stats/played', { method: 'POST', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ pid: RB.net.playerId(), kind, ms: Math.round(ms), host }) }).catch(() => {});
       } catch (e) { /* offline: not counted */ }
     }
