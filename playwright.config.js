@@ -10,6 +10,7 @@ const crypto = require('crypto');
 const STATE = path.join(os.tmpdir(), 'rowbusters-test-state');
 // Same for test recordings: written into the project they'd restart the server mid-test.
 const OUT = process.env.RB_TEST_OUT || path.join(os.tmpdir(), 'rowbusters-test-results');
+// Daily report tests: Telegram is a local stand-in on port 4298 (tests/e2e/report.spec.js).
 // Sign-in tests: a throwaway "test" provider. Its key pair is made here (kept in the temp folder
 // so every Playwright process signs with the same key); the local server gets the public half.
 const AUTH_KEY = path.join(os.tmpdir(), 'rowbusters-test-auth.json');
@@ -43,7 +44,7 @@ module.exports = defineConfig({
       launchOptions: { env: { ...process.env, WEBKIT_SKIA_ENABLE_CPU_RENDERING: '1' } } }, grep: /@webkit/ }] : []),
   ],
   webServer: {
-    command: `rm -rf "${STATE}" && npx wrangler dev --port 8787 --ip 127.0.0.1 --persist-to "${STATE}" --var AUTH_TEST_JWKS:${TEST_JWKS} --var GOOGLE_CLIENT_ID:test-google-client --var APPLE_CLIENT_IDS:test-apple-client --var MICROSOFT_CLIENT_ID:test-microsoft-client`,
+    command: `rm -rf "${STATE}" && npx wrangler dev --port 8787 --ip 127.0.0.1 --persist-to "${STATE}" --var AUTH_TEST_JWKS:${TEST_JWKS} --var GOOGLE_CLIENT_ID:test-google-client --var APPLE_CLIENT_IDS:test-apple-client --var MICROSOFT_CLIENT_ID:test-microsoft-client --test-scheduled --var TELEGRAM_BOT_TOKEN:test-token --var TELEGRAM_CHAT_ID:4242 --var TELEGRAM_API:http://127.0.0.1:4298 --var REPORT_TEST_EVERY_MS:0`,
     url: 'http://127.0.0.1:8787/health',
     reuseExistingServer: false,
     timeout: 120000,

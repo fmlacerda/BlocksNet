@@ -21,6 +21,10 @@
  *   each player's all-time totals.
  * - GET /lobby returns the rooms, the top players (all time and last 7 days) and, with
  *   ?pid=, your own rank.
+ * - Daily report for the owner: every game adds to daily totals (games, players, play time, players
+ *   per country). Games played offline, in private rooms and in Practice are reported by the game
+ *   with POST /stats/played. Each morning a Telegram message sums up the day before
+ *   (TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID are set as secrets in Cloudflare).
  * - Accounts (optional): POST /auth/signin with a provider's ID token links the player's id to a
  *   scrambled account key (server/auth.js), so one person keeps one ranking line on every device.
  *   POST /account/delete removes the account and its results. GET /auth/config lists providers.
@@ -29,7 +33,7 @@ import { DurableObject } from 'cloudflare:workers';
 import { authConfig, verifySignIn } from './auth.js';
 import { filterChat, badName } from './moderation.js';
 
-const SERVER_VERSION = '2026.10.28h';   // shown on /health, to check which code is deployed
+const SERVER_VERSION = '2026.11.06a';   // shown on /health, to check which code is deployed
 const ROOMS = 7;
 const MAX_PLAYERS = 4;
 const MAX_WATCHERS = 8;
@@ -39,7 +43,7 @@ const PROTO = 1;
 // reloads itself; store apps show an update message). Versions compare as text (YYYY.MM.DDx).
 const MIN_CLIENT_VERSION = '2026.10.12a';
 // Abuse limits, per connection unless noted.
-const LIMITS = { msgBytes: 16384, msgsPerSec: 100, chatPerWindow: 5, chatWindowMs: 10000, socketsPerIp: 12, errorsPerMin: 60, signInsPerMin: 30, reportsPerHour: 5 };
+const LIMITS = { msgBytes: 16384, msgsPerSec: 100, chatPerWindow: 5, chatWindowMs: 10000, socketsPerIp: 12, errorsPerMin: 60, signInsPerMin: 30, reportsPerHour: 5, playedPerMin: 600 };
 // Reports from this many different players within a day mute a player's chat for a day
 // (and replace a nickname reported as offensive).
 const REPORTS_TO_ACT = 3;
@@ -55,6 +59,11 @@ const ROOM_MODES = ['normal', 'normal', 'teams', 'normal', 'sns', 'fast', 'pure'
 const TEAMS = ['A', 'B'];
 const TEAM_SIZE = 2;
 const WEEK_MS = 7 * 24 * 3600 * 1000;
+// Daily report: days follow this time zone; per-player daily rows are kept this many days.
+const REPORT_TZ_DEFAULT = 'America/Toronto';
+const DAILY_KEEP_DAYS = 35;
+const PLAYED_KINDS = ['bots', 'private', 'practice'];   // games the server doesn't see itself
+const MAX_PLAY_MS = 3 * 3600 * 1000;                     // one reported game counts at most this long
 
 const cleanName = n => (String(n || '').replace(/[^\p{L}\p{N} _.\-]/gu, '').trim().slice(0, 12)) || 'Player';
 const cleanPid = p => String(p || '').replace(/[^a-z0-9]/gi, '').slice(0, 24);
@@ -80,13 +89,68 @@ export default {
     if (url.pathname === '/errors' && request.method === 'POST') return clientError(request);
     if (url.pathname === '/auth/config') return json(authConfig(env));
     if (['/auth/signin', '/account/delete', '/account/name'].includes(url.pathname) && request.method === 'POST') return account(request, env, url.pathname);
+    if (url.pathname === '/stats/played' && request.method === 'POST') return played(request, env);
+    if (url.pathname === '/report/test') return reportTest(url, env);
     if (url.pathname === '/lobby' || url.pathname.startsWith('/ws/room/')) {
       const hub = env.HUB.get(env.HUB.idFromName('main'));
-      return hub.fetch(request);
+      if (url.pathname === '/lobby') return hub.fetch(request);
+      // The player's country (from Cloudflare, never the address itself) for the daily totals.
+      const headers = new Headers(request.headers);
+      headers.set('X-RB-Country', country(request));
+      return hub.fetch(new Request(request, { headers }));
     }
     return json({ error: 'not found' }, 404);
   },
+  // The daily report (cron in wrangler.jsonc): yesterday's totals, sent to Telegram.
+  async scheduled(event, env, ctx) {
+    ctx.waitUntil(sendReport(env, -1));
+  },
 };
+
+const country = request => (/^[A-Z]{2}$/.test(request.cf && request.cf.country || '') ? request.cf.country : 'XX');
+const dayKey = (env, offset = 0) => new Intl.DateTimeFormat('en-CA', { timeZone: env.REPORT_TZ || REPORT_TZ_DEFAULT, year: 'numeric', month: '2-digit', day: '2-digit' })
+  .format(new Date(Date.now() + offset * 24 * 3600 * 1000));
+
+// A game the server doesn't see (offline vs bots, a private room, a Practice lesson), reported
+// by the game when it ends. Only its kind, length and the player's random id are kept.
+let playedWindow = { start: 0, n: 0 };
+async function played(request, env) {
+  const now = Date.now();
+  if (now - playedWindow.start > 60000) playedWindow = { start: now, n: 0 };
+  if (++playedWindow.n > LIMITS.playedPerMin) return new Response(null, { status: 429, headers: CORS });
+  let b = {};
+  try { b = JSON.parse((await request.text()).slice(0, 2000)); } catch (e) { return json({ error: 'bad request' }, 400); }
+  const pid = cleanPid(b.pid);
+  if (!pid || !PLAYED_KINDS.includes(b.kind)) return json({ error: 'bad request' }, 400);
+  const ms = Math.max(0, Math.min(MAX_PLAY_MS, Math.floor(+b.ms || 0)));
+  const hub = env.HUB.get(env.HUB.idFromName('main'));
+  // In a private room every phone reports its own play time; only the host counts the game.
+  await hub.addPlayed(dayKey(env), b.kind, b.kind === 'private' && !b.host ? 0 : 1, [{ pid, ms, country: country(request) }]);
+  return new Response(null, { status: 204, headers: CORS });
+}
+
+// Builds a day's report and sends it to the owner's Telegram chat.
+async function sendReport(env, offset, chat = env.TELEGRAM_CHAT_ID) {
+  if (!env.TELEGRAM_BOT_TOKEN || !chat) { console.log('daily report: Telegram is not set up'); return { sent: false, reason: 'not set up' }; }
+  const hub = env.HUB.get(env.HUB.idFromName('main'));
+  const text = await hub.dailyReport(dayKey(env, offset), dayKey(env, offset - 1), offset === 0);
+  const r = await fetch(`${env.TELEGRAM_API || 'https://api.telegram.org'}/bot${env.TELEGRAM_BOT_TOKEN}/sendMessage`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ chat_id: chat, text, parse_mode: 'HTML', disable_web_page_preview: true }),
+  });
+  if (!r.ok) console.error('daily report: Telegram answered', r.status, (await r.text()).slice(0, 300));
+  return { sent: r.ok };
+}
+
+// Sends today's numbers so far, to check the set-up. Only to the chat the report goes to, at most
+// once a minute.
+let lastTest = 0;
+async function reportTest(url, env) {
+  if (!env.TELEGRAM_CHAT_ID || url.searchParams.get('chat') !== String(env.TELEGRAM_CHAT_ID)) return json({ error: 'not found' }, 404);
+  if (Date.now() - lastTest < Number(env.REPORT_TEST_EVERY_MS ?? 60000)) return json({ error: 'try again in a minute' }, 429);
+  lastTest = Date.now();
+  return json(await sendReport(env, 0));
+}
 
 // Sign-in and account deletion. The player id (kept on the device) is what the game plays under;
 // signing in swaps it for the account's id, so every device of one person shares one ranking line.
@@ -148,6 +212,11 @@ export class Hub extends DurableObject {
     this.sql.exec(`CREATE TABLE IF NOT EXISTS reports (reported TEXT NOT NULL, reporter TEXT NOT NULL, reason TEXT NOT NULL, ts INTEGER NOT NULL)`);
     this.sql.exec(`CREATE INDEX IF NOT EXISTS reports_reported ON reports (reported, ts)`);
     this.sql.exec(`CREATE TABLE IF NOT EXISTS mutes (pid TEXT PRIMARY KEY, until INTEGER NOT NULL)`);
+    // Daily report: per day, each player's games and play time (kept DAILY_KEEP_DAYS days), and
+    // totals that keep no player id: games by kind, and players per country.
+    this.sql.exec(`CREATE TABLE IF NOT EXISTS daily_players (day TEXT NOT NULL, pid TEXT NOT NULL, games INTEGER NOT NULL, play_ms INTEGER NOT NULL, PRIMARY KEY (day, pid))`);
+    this.sql.exec(`CREATE TABLE IF NOT EXISTS daily_games (day TEXT NOT NULL, kind TEXT NOT NULL, games INTEGER NOT NULL, PRIMARY KEY (day, kind))`);
+    this.sql.exec(`CREATE TABLE IF NOT EXISTS daily_countries (day TEXT NOT NULL, country TEXT NOT NULL, players INTEGER NOT NULL, PRIMARY KEY (day, country))`);
     // The account's nickname: the same on every device, and nobody else's.
     try { this.sql.exec(`ALTER TABLE accounts ADD COLUMN name TEXT NOT NULL DEFAULT ''`); } catch (e) { /* exists */ }
     // All-time stat totals (added later; ALTER fails harmlessly once the column exists).
@@ -211,8 +280,54 @@ export class Hub extends DurableObject {
     const [client, server] = Object.values(pair);
     server.accept();
     if (ip) this.ipCount.set(ip, (this.ipCount.get(ip) || 0) + 1);
-    this.attach(room, server, ip);
+    this.attach(room, server, ip, request.headers.get('X-RB-Country') || 'XX');
     return new Response(null, { status: 101, webSocket: client });
+  }
+
+  // ------------------------------------------------------------ daily report
+  // One finished game of a kind (games = 1, or 0 when another phone counts it) and the players
+  // in it: [{ pid, ms, country }]. A player's first game of the day adds them to their country.
+  addPlayed(day, kind, games, players) {
+    if (games) this.sql.exec(`INSERT INTO daily_games (day, kind, games) VALUES (?, ?, ?) ON CONFLICT(day, kind) DO UPDATE SET games = games + excluded.games`, day, kind, games);
+    for (const p of players) {
+      if (!p.pid) continue;
+      const seen = this.sql.exec(`SELECT 1 FROM daily_players WHERE day = ? AND pid = ?`, day, p.pid).toArray().length > 0;
+      this.sql.exec(`INSERT INTO daily_players (day, pid, games, play_ms) VALUES (?, ?, 1, ?) ON CONFLICT(day, pid) DO UPDATE SET games = games + 1, play_ms = play_ms + excluded.play_ms`, day, p.pid, p.ms | 0);
+      if (!seen) this.sql.exec(`INSERT INTO daily_countries (day, country, players) VALUES (?, ?, 1) ON CONFLICT(day, country) DO UPDATE SET players = players + 1`, day, p.country || 'XX');
+    }
+    if (this.prunedDay !== day) {
+      this.prunedDay = day;
+      const cut = new Date(Date.parse(day) - DAILY_KEEP_DAYS * 24 * 3600 * 1000).toISOString().slice(0, 10);
+      this.sql.exec(`DELETE FROM daily_players WHERE day < ?`, cut);
+    }
+  }
+
+  // The Telegram message for one day, with the day before for comparison.
+  dailyReport(day, before, soFar) {
+    const games = d => Object.fromEntries(this.sql.exec(`SELECT kind, games FROM daily_games WHERE day = ?`, d).toArray().map(r => [r.kind, r.games]));
+    const people = d => this.sql.exec(`SELECT COUNT(*) AS n, COALESCE(SUM(play_ms), 0) AS ms FROM daily_players WHERE day = ?`, d).toArray()[0];
+    const g = games(day), g0 = games(before), p = people(day), p0 = people(before);
+    const total = o => (o.online || 0) + (o.private || 0) + (o.bots || 0);
+    const change = (now, then) => (then ? ` (${now >= then ? '▲' : '▼'} ${Math.abs(now - then)} vs day before)` : '');
+    const mins = ms => { const m = Math.round(ms / 60000); return m < 60 ? `${m} min` : `${Math.floor(m / 60)} h ${m % 60} min`; };
+    const names = new Intl.DisplayNames(['en'], { type: 'region' });
+    const flag = c => (c === 'XX' ? '🏳️' : String.fromCodePoint(...[...c].map(ch => 0x1f1e6 + ch.charCodeAt(0) - 65)));
+    const countries = this.sql.exec(`SELECT country, players FROM daily_countries WHERE day = ? ORDER BY players DESC, country`, day).toArray();
+    const shown = countries.slice(0, 10).map(r => `${flag(r.country)} ${r.country === 'XX' ? 'Unknown' : names.of(r.country)}: ${r.players}`);
+    const rest = countries.slice(10).reduce((n, r) => n + r.players, 0);
+    const date = new Date(day + 'T12:00:00Z').toLocaleDateString('en-CA', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' });
+    return [
+      `<b>📊 Rowbusters · ${date}${soFar ? ' (so far today)' : ''}</b>`,
+      '',
+      `🎮 <b>Games played:</b> ${total(g)}${change(total(g), total(g0))}`,
+      `   online ${g.online || 0} · private rooms ${g.private || 0} · vs bots ${g.bots || 0}`,
+      `   Practice lessons: ${g.practice || 0}`,
+      `👥 <b>Players:</b> ${p.n}${change(p.n, p0.n)}`,
+      `⏱ <b>Average time played per player:</b> ${p.n ? mins(p.ms / p.n) : '–'} (total ${mins(p.ms)})`,
+      `🌍 <b>Countries:</b> ${countries.length ? '' : 'none yet'}`,
+      ...shown.map(l => '   ' + l),
+      ...(rest ? [`   Others: ${rest}`] : []),
+    ].join('\n');
   }
 
   // ------------------------------------------------------------ accounts (called by the Worker)
@@ -338,8 +453,8 @@ export class Hub extends DurableObject {
   }
 
   // ------------------------------------------------------------ connections
-  attach(room, ws, ip = '') {
-    const c = { id: 'c' + (this.nextId++), ws, room, name: '', pid: '', joined: false, rate: { start: 0, n: 0 }, chats: [] };
+  attach(room, ws, ip = '', country = 'XX') {
+    const c = { id: 'c' + (this.nextId++), ws, room, name: '', pid: '', country, joined: false, rate: { start: 0, n: 0 }, chats: [] };
     let counted = !!ip;
     const uncount = () => {
       if (!counted) return;
@@ -481,7 +596,7 @@ export class Hub extends DurableObject {
       linesPerLevel: Math.max(1, Math.min(20, s.linesPerLevel | 0 || 2)),
       mode: room.mode,                                  // set by the room, not the host
     };
-    const players = room.clients.map(x => ({ name: x.name, owner: x.id, pid: x.pid, dev: x.dev, team: teams ? x.team : undefined }));
+    const players = room.clients.map(x => ({ name: x.name, owner: x.id, pid: x.pid, dev: x.dev, country: x.country, team: teams ? x.team : undefined }));
     // Bots keep the same names game after game in a room (so the room's game summary can count
     // them); a new set is drawn once the room has emptied.
     if (!room.botNames) room.botNames = BOT_NAMES.slice().sort(() => Math.random() - 0.5);
@@ -504,7 +619,7 @@ export class Hub extends DurableObject {
     players.forEach((p, i) => { p.slot = i + 1; });
     room.game = { players, settings, alive: new Set(players.map(p => p.slot)), owners: new Map(players.map(p => [p.slot, p.owner])), lastF: new Map(), away: new Map(), started: Date.now(),
       stats: new Map(players.map(p => [p.slot, { pieces: 0, lines: 0, busts: 0, sent: 0, used: 0, recv: 0, by: {}, died: 0 }])) };
-    this.toRoom(room, { t: 'start', players: players.map(({ pid, ...p }) => p), settings });
+    this.toRoom(room, { t: 'start', players: players.map(({ pid, country, ...p }) => p), settings });
     this.broadcastLobby(room);
   }
 
@@ -513,7 +628,7 @@ export class Hub extends DurableObject {
     const g = room.game;
     this.send(c, {
       t: 'watch',
-      players: g.players.map(({ pid, ...p }) => p),
+      players: g.players.map(({ pid, country, ...p }) => p),
       settings: g.settings,
       fields: [...g.lastF.values()],
       dead: g.players.map(p => p.slot).filter(sl => !g.alive.has(sl)),
@@ -596,6 +711,8 @@ export class Hub extends DurableObject {
     const stats = this.roundStats(g, winner, winTeam);
     this.toRoom(room, stats);
     this.record(g, winner, stats, winTeam);
+    this.addPlayed(dayKey(this.env, 0), 'online', 1, g.players.filter(p => !p.bot && p.pid)
+      .map(p => ({ pid: p.pid, ms: stats.players.find(r => r.slot === p.slot).ms, country: p.country })));
     this.seatWatchers(room);
     this.broadcastLobby(room);
   }

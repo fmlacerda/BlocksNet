@@ -138,6 +138,7 @@
         const me = L.me;
         setTimeout(() => { if (L && L.me === me && L.over && !L.lesson.final) me.piece = null; }, 0);
         store.set('practice', [...done().add(L.lesson.id)]);
+        if (app.reportPlayed) app.reportPlayed('practice', room.elapsed);
         coach(L.lesson.after(e), { next: true });
         return;
       }
