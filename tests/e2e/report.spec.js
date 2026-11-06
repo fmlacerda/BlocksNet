@@ -18,14 +18,15 @@ test.beforeAll(async () => {
 });
 test.afterAll(() => new Promise(r => telegram.close(r)));
 
+const messages = from => sent.slice(from).filter(m => m.url === '/bottest-token/sendMessage');
+
 // Today's report so far, sent through the test address, read back as numbers.
 async function report() {
   const before = sent.length;
   const r = await (await fetch(`${BASE}/report/test?chat=4242`)).json();
   expect(r.sent).toBe(true);
-  expect(sent.length).toBe(before + 1);
-  const m = sent[sent.length - 1];
-  expect(m.url).toBe('/bottest-token/sendMessage');
+  expect(messages(before)).toHaveLength(1);
+  const m = messages(before)[0];
   expect(m.body.chat_id).toBe('4242');
   const text = m.body.text;
   const num = re => +(text.match(re) || [0, 0])[1];
@@ -81,7 +82,46 @@ test('the daily report counts every kind of game, players, time played and count
 test('the morning report goes out on schedule, and the test address only answers the owner’s chat', async () => {
   const before = sent.length;
   await fetch(`${BASE}/__scheduled?cron=7+13+*+*+*`);
-  await expect.poll(() => sent.length).toBe(before + 1);
-  expect(sent[sent.length - 1].body.text).not.toContain('so far today');   // yesterday's full day
+  await expect.poll(() => messages(before).length).toBe(1);
+  expect(messages(before)[0].body.text).not.toContain('so far today');   // yesterday's full day
   expect((await fetch(`${BASE}/report/test?chat=1`)).status).toBe(404);
+});
+
+test('the bot answers /today and /yesterday in the owner’s chat only', async () => {
+  // The test address also tells Telegram where to deliver the bot's messages, and its commands.
+  const before = sent.length;
+  await (await fetch(`${BASE}/report/test?chat=4242`)).json();
+  const hook = sent.slice(before).find(m => m.url === '/bottest-token/setWebhook');
+  expect(hook.body.url).toMatch(/^https:\/\/rowbusters\.com\/telegram\/[0-9a-f]{32}$/);
+  expect(hook.body.secret_token).toBe(hook.body.url.split('/').pop());
+  const cmds = sent.slice(before).find(m => m.url === '/bottest-token/setMyCommands');
+  expect(cmds.body.commands.map(c => c.command)).toEqual(['today', 'yesterday']);
+
+  const path = new URL(hook.body.url).pathname;
+  const say = (text, { chat = 4242, key = hook.body.secret_token, to = path } = {}) => fetch(BASE + to, {
+    method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Telegram-Bot-Api-Secret-Token': key },
+    body: JSON.stringify({ update_id: 1, message: { message_id: 1, chat: { id: chat }, text } }),
+  });
+
+  let from = sent.length;
+  expect((await say('/today')).status).toBe(200);
+  await expect.poll(() => messages(from).length).toBe(1);
+  expect(messages(from)[0].body.text).toContain('so far today');
+
+  from = sent.length;
+  await say('/yesterday@RowbustersBot');
+  await expect.poll(() => messages(from).length).toBe(1);
+  expect(messages(from)[0].body.text).not.toContain('so far today');
+
+  from = sent.length;
+  await say('hello');                                                      // anything else: a short help
+  await expect.poll(() => messages(from).length).toBe(1);
+  expect(messages(from)[0].body.text).toContain('/today');
+
+  from = sent.length;
+  expect((await say('/today', { chat: 999 })).status).toBe(200);          // someone else's chat: ignored
+  expect((await say('/today', { key: 'wrong' })).status).toBe(404);        // not from Telegram
+  expect((await say('/today', { to: '/telegram/0123' })).status).toBe(404);
+  await new Promise(r => setTimeout(r, 500));
+  expect(messages(from)).toHaveLength(0);
 });

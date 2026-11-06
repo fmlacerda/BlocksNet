@@ -24,7 +24,8 @@
  * - Daily report for the owner: every game adds to daily totals (games, players, play time, players
  *   per country). Games played offline, in private rooms and in Practice are reported by the game
  *   with POST /stats/played. Each morning a Telegram message sums up the day before
- *   (TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID are set as secrets in Cloudflare).
+ *   (TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID are set as secrets in Cloudflare). In that chat the bot
+ *   also answers /today and /yesterday (Telegram delivers messages to /telegram/<key>).
  * - Accounts (optional): POST /auth/signin with a provider's ID token links the player's id to a
  *   scrambled account key (server/auth.js), so one person keeps one ranking line on every device.
  *   POST /account/delete removes the account and its results. GET /auth/config lists providers.
@@ -33,7 +34,7 @@ import { DurableObject } from 'cloudflare:workers';
 import { authConfig, verifySignIn } from './auth.js';
 import { filterChat, badName } from './moderation.js';
 
-const SERVER_VERSION = '2026.11.06a';   // shown on /health, to check which code is deployed
+const SERVER_VERSION = '2026.11.06b';   // shown on /health, to check which code is deployed
 const ROOMS = 7;
 const MAX_PLAYERS = 4;
 const MAX_WATCHERS = 8;
@@ -82,7 +83,7 @@ const json = (data, status = 200) => new Response(JSON.stringify(data), {
 });
 
 export default {
-  async fetch(request, env) {
+  async fetch(request, env, ctx) {
     const url = new URL(request.url);
     if (request.method === 'OPTIONS') return new Response(null, { headers: CORS });
     if (url.pathname === '/health') return json({ ok: true, service: 'rowbusters', version: SERVER_VERSION, minClient: MIN_CLIENT_VERSION, rooms: ROOMS });
@@ -91,6 +92,7 @@ export default {
     if (['/auth/signin', '/account/delete', '/account/name'].includes(url.pathname) && request.method === 'POST') return account(request, env, url.pathname);
     if (url.pathname === '/stats/played' && request.method === 'POST') return played(request, env);
     if (url.pathname === '/report/test') return reportTest(url, env);
+    if (url.pathname.startsWith('/telegram/') && request.method === 'POST') return telegramUpdate(request, url, env, ctx);
     if (url.pathname === '/lobby' || url.pathname.startsWith('/ws/room/')) {
       const hub = env.HUB.get(env.HUB.idFromName('main'));
       if (url.pathname === '/lobby') return hub.fetch(request);
@@ -104,6 +106,7 @@ export default {
   // The daily report (cron in wrangler.jsonc): yesterday's totals, sent to Telegram.
   async scheduled(event, env, ctx) {
     ctx.waitUntil(sendReport(env, -1));
+    if (env.PUBLIC_URL) ctx.waitUntil(registerBot(env, env.PUBLIC_URL));
   },
 };
 
@@ -129,26 +132,66 @@ async function played(request, env) {
   return new Response(null, { status: 204, headers: CORS });
 }
 
-// Builds a day's report and sends it to the owner's Telegram chat.
-async function sendReport(env, offset, chat = env.TELEGRAM_CHAT_ID) {
-  if (!env.TELEGRAM_BOT_TOKEN || !chat) { console.log('daily report: Telegram is not set up'); return { sent: false, reason: 'not set up' }; }
-  const hub = env.HUB.get(env.HUB.idFromName('main'));
-  const text = await hub.dailyReport(dayKey(env, offset), dayKey(env, offset - 1), offset === 0);
-  const r = await fetch(`${env.TELEGRAM_API || 'https://api.telegram.org'}/bot${env.TELEGRAM_BOT_TOKEN}/sendMessage`, {
-    method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ chat_id: chat, text, parse_mode: 'HTML', disable_web_page_preview: true }),
+const ownerChat = env => String(env.TELEGRAM_CHAT_ID || '').trim();
+async function telegram(env, method, body) {
+  const r = await fetch(`${env.TELEGRAM_API || 'https://api.telegram.org'}/bot${String(env.TELEGRAM_BOT_TOKEN).trim()}/${method}`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
   });
-  if (!r.ok) console.error('daily report: Telegram answered', r.status, (await r.text()).slice(0, 300));
-  return { sent: r.ok };
+  if (!r.ok) console.error(`Telegram ${method} answered`, r.status, (await r.text()).slice(0, 300));
+  return r.ok;
 }
 
-// Sends today's numbers so far, to check the set-up. Only to the chat the report goes to, at most
-// once a minute.
+// Builds a day's report (0 = today so far, -1 = yesterday) and sends it to the owner's chat.
+async function sendReport(env, offset) {
+  if (!env.TELEGRAM_BOT_TOKEN || !ownerChat(env)) { console.log('daily report: Telegram is not set up'); return { sent: false, reason: 'not set up' }; }
+  const hub = env.HUB.get(env.HUB.idFromName('main'));
+  const text = await hub.dailyReport(dayKey(env, offset), dayKey(env, offset - 1), offset === 0);
+  return { sent: await telegram(env, 'sendMessage', { chat_id: ownerChat(env), text, parse_mode: 'HTML', disable_web_page_preview: true }) };
+}
+
+// The secret part of the address Telegram delivers the bot's messages to, made from the bot token
+// (so there is nothing else to set up). Telegram also sends it back in a header with each message.
+async function botKey(env) {
+  const d = await crypto.subtle.digest('SHA-256', new TextEncoder().encode('rowbusters-telegram:' + String(env.TELEGRAM_BOT_TOKEN).trim()));
+  return [...new Uint8Array(d)].slice(0, 16).map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
+// Tells Telegram where to deliver messages sent to the bot, and which commands to list.
+async function registerBot(env, origin) {
+  if (!env.TELEGRAM_BOT_TOKEN || !ownerChat(env)) return;
+  const key = await botKey(env);
+  await telegram(env, 'setWebhook', { url: `${origin}/telegram/${key}`, secret_token: key, allowed_updates: ['message'] });
+  await telegram(env, 'setMyCommands', { commands: [
+    { command: 'today', description: 'Numbers so far today' },
+    { command: 'yesterday', description: 'Full report for yesterday' },
+  ] });
+}
+
+// A message to the bot. Only the owner's chat gets answers; anyone else is ignored.
+async function telegramUpdate(request, url, env, ctx) {
+  if (!env.TELEGRAM_BOT_TOKEN) return json({ error: 'not found' }, 404);
+  const key = await botKey(env);
+  if (url.pathname !== `/telegram/${key}` || request.headers.get('X-Telegram-Bot-Api-Secret-Token') !== key) return json({ error: 'not found' }, 404);
+  let u = {};
+  try { u = JSON.parse((await request.text()).slice(0, 20000)); } catch (e) { /* not JSON */ }
+  const m = u.message || {};
+  if (m.chat && String(m.chat.id) === ownerChat(env)) {
+    const cmd = String(m.text || '').trim().split(/[\s@]/)[0].toLowerCase();
+    if (cmd === '/today') ctx.waitUntil(sendReport(env, 0));
+    else if (cmd === '/yesterday') ctx.waitUntil(sendReport(env, -1));
+    else ctx.waitUntil(telegram(env, 'sendMessage', { chat_id: ownerChat(env), text: 'Send /today for the numbers so far today, or /yesterday for the full report of yesterday. The daily report comes by itself every morning.' }));
+  }
+  return new Response('ok');
+}
+
+// Sends today's numbers so far, to check the set-up, and (re)connects the bot's commands. Only to
+// the chat the report goes to, at most once a minute.
 let lastTest = 0;
 async function reportTest(url, env) {
-  if (!env.TELEGRAM_CHAT_ID || url.searchParams.get('chat') !== String(env.TELEGRAM_CHAT_ID)) return json({ error: 'not found' }, 404);
+  if (!ownerChat(env) || (url.searchParams.get('chat') || '').trim() !== ownerChat(env)) return json({ error: 'not found' }, 404);
   if (Date.now() - lastTest < Number(env.REPORT_TEST_EVERY_MS ?? 60000)) return json({ error: 'try again in a minute' }, 429);
   lastTest = Date.now();
+  await registerBot(env, env.PUBLIC_URL || url.origin);
   return json(await sendReport(env, 0));
 }
 

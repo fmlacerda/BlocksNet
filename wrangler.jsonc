@@ -34,7 +34,9 @@
     "GOOGLE_CLIENT_ID": "360016718949-oa1b23bq0krbauk2tv91nepvhdmtgt8d.apps.googleusercontent.com",
     "MICROSOFT_CLIENT_ID": "64f313de-5c79-4191-b64c-3282a9a41f97",
     // The daily report's days run midnight to midnight in this time zone.
-    "REPORT_TZ": "America/Toronto"
+    "REPORT_TZ": "America/Toronto",
+    // Where Telegram delivers messages to the report bot (/today, /yesterday).
+    "PUBLIC_URL": "https://rowbusters.com"
   },
   // Previews: every pull request gets its own copy at a workers.dev address (Cloudflare runs
   // `wrangler preview` for non-production branches). Each preview gets a NEW, empty database
