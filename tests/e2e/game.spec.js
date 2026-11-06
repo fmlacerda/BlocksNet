@@ -1,7 +1,7 @@
 // The game in real browser pages: lobby, offline play, public rooms, stats, phones.
 // Tests tagged @webkit also run in Safari's engine on CI.
 const { test, expect, devices } = require('@playwright/test');
-const { BASE, GAME_URL, openGame, joinPublicRoom, hostStart, knockOut, autoplay, gameOver, emptyRoom } = require('./helpers');
+const { BASE, GAME_URL, openGame, playedOn, joinPublicRoom, hostStart, knockOut, autoplay, gameOver, emptyRoom } = require('./helpers');
 
 test.describe.configure({ mode: 'serial' });
 
@@ -25,8 +25,8 @@ test('offline game against bots runs and ends with the game-over screen @webkit'
   await expect(p.locator('#rb-end')).toBeVisible();
   await expect(p.locator('#rb-end-title')).toContainText('win');
   // The game reports it for the daily totals: its kind, length and the random player id only.
-  await expect.poll(() => p.context().played.length).toBe(1);
-  const played = p.context().played[0];
+  await expect.poll(async () => (await playedOn(p)).length).toBe(1);
+  const played = (await playedOn(p))[0];
   expect(played).toMatchObject({ kind: 'bots', host: false });
   expect(played.ms).toBeGreaterThan(0);                              // game time (slower in some test browsers)
   expect(Object.keys(played).sort()).toEqual(['host', 'kind', 'ms', 'pid']);
