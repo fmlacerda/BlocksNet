@@ -1010,9 +1010,22 @@
       if (invite) { $('rb-code').value = RB.net.cleanCode(invite); openJoin(); }
     }
 
+    // Games the server doesn't see itself count towards the daily totals: kind, length and the
+    // random player id only.
+    function reportPlayed(kind, ms, host = false) {
+      if (demo || !RB.net || !RB.net.serverURL()) return;
+      try {
+        fetch(RB.net.serverURL() + '/stats/played', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ pid: RB.net.playerId(), kind, ms: Math.round(ms), host }) }).catch(() => {});
+      } catch (e) { /* offline: not counted */ }
+    }
+    app.reportPlayed = reportPlayed;
+
     room.on('end', winner => {
       if (demo) { setTimeout(start, 2500); return; }
       if (app.practice) return;   // practice explains the result itself
+      if (!session) reportPlayed('bots', room.elapsed);
+      else if (!session.public) reportPlayed('private', room.elapsed, !!session.isHost);
       const wins = store.get('winlist', {});
       if (winner) wins[winner.name] = (wins[winner.name] || 0) + 1;
       store.set('winlist', wins);

@@ -24,6 +24,12 @@ test('offline game against bots runs and ends with the game-over screen @webkit'
   await p.evaluate(() => { for (const pl of RB.current.room.players) if (pl !== RB.current.me) pl.die(); });
   await expect(p.locator('#rb-end')).toBeVisible();
   await expect(p.locator('#rb-end-title')).toContainText('win');
+  // The game reports it for the daily totals: its kind, length and the random player id only.
+  await expect.poll(() => p.context().played.length).toBe(1);
+  const played = p.context().played[0];
+  expect(played).toMatchObject({ kind: 'bots', host: false });
+  expect(played.ms).toBeGreaterThan(0);                              // game time (slower in some test browsers)
+  expect(Object.keys(played).sort()).toEqual(['host', 'kind', 'ms', 'pid']);
   expect(p.errors).toEqual([]);
   await p.context().close();
 });

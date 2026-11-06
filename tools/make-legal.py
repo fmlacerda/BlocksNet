@@ -5,6 +5,8 @@ import html, sys
 OUT = sys.argv[1]
 UPDATED = {'en': 'Last updated: 27 October 2026', 'es': 'Última actualización: 27 de octubre de 2026', 'pt': 'Última atualização: 27 de outubro de 2026',
            'fr': 'Dernière mise à jour : 27 octobre 2026', 'de': 'Zuletzt aktualisiert: 27. Oktober 2026'}
+PRIVACY_UPDATED = {'en': 'Last updated: 6 November 2026', 'es': 'Última actualización: 6 de noviembre de 2026', 'pt': 'Última atualização: 6 de novembro de 2026',
+                   'fr': 'Dernière mise à jour : 6 novembre 2026', 'de': 'Zuletzt aktualisiert: 6. November 2026'}
 SUPPORT_UPDATED = {'en': 'Last updated: 28 October 2026', 'es': 'Última actualización: 28 de octubre de 2026', 'pt': 'Última atualização: 28 de outubro de 2026',
                    'fr': 'Dernière mise à jour : 28 octobre 2026', 'de': 'Zuletzt aktualisiert: 28. Oktober 2026'}
 # The privacy policy and terms, linked at the foot of the support page.
@@ -19,6 +21,7 @@ PRIVACY = {
  ('What the game stores on its server', [
   'Your nickname, and a random code that your device makes up so your results stay yours.',
   'Your results in public rooms: wins, games, lines, pieces per minute and similar game stats, and whether you play on a phone or a computer.',
+  'Daily totals for running the game: which random player codes played each day, how many games and for how long (kept 35 days), and how many players came from each country. The country comes from your internet address, which is not stored.',
   'If you sign in with Apple, Google or Microsoft: which of them you used and a scrambled code that stands for your account. We never ask for or receive your email or name.',
   'Reports: when a player reports another one, the two random codes, the reason and the time, kept for 30 days.',
   'Chat is not stored. When someone is reported, the room’s last 20 chat lines go to the server log so the report can be checked; the log is deleted after a few days.',
@@ -39,6 +42,7 @@ PRIVACY = {
  ('Qué guarda el juego en su servidor', [
   'Tu apodo y un código aleatorio que crea tu dispositivo para que tus resultados sigan siendo tuyos.',
   'Tus resultados en las salas públicas: victorias, partidas, filas, piezas por minuto y estadísticas similares, y si juegas en un teléfono o una computadora.',
+  'Totales diarios para gestionar el juego: qué códigos aleatorios de jugador jugaron cada día, cuántas partidas y durante cuánto tiempo (se guardan 35 días), y cuántos jugadores hubo de cada país. El país se deduce de tu dirección de internet, que no se guarda.',
   'Si inicias sesión con Apple, Google o Microsoft: cuál usaste y un código cifrado que representa tu cuenta. Nunca pedimos ni recibimos tu correo ni tu nombre.',
   'Denuncias: cuando un jugador denuncia a otro, los dos códigos aleatorios, el motivo y la hora, durante 30 días.',
   'El chat no se guarda. Cuando se denuncia a alguien, las últimas 20 líneas del chat de la sala van al registro del servidor para revisar la denuncia; el registro se borra a los pocos días.',
@@ -59,6 +63,7 @@ PRIVACY = {
  ('O que o jogo guarda no servidor', [
   'Seu apelido e um código aleatório que seu dispositivo cria para que seus resultados continuem sendo seus.',
   'Seus resultados nas salas públicas: vitórias, partidas, linhas, peças por minuto e estatísticas parecidas, e se você joga no celular ou no computador.',
+  'Totais diários para administrar o jogo: quais códigos aleatórios de jogador jogaram em cada dia, quantas partidas e por quanto tempo (guardados por 35 dias), e quantos jogadores vieram de cada país. O país vem do seu endereço de internet, que não é guardado.',
   'Se você entrar com Apple, Google ou Microsoft: qual deles usou e um código embaralhado que representa sua conta. Nunca pedimos nem recebemos seu e-mail ou nome.',
   'Denúncias: quando um jogador denuncia outro, os dois códigos aleatórios, o motivo e o horário, guardados por 30 dias.',
   'O chat não é guardado. Quando alguém é denunciado, as últimas 20 linhas do chat da sala vão para o registro do servidor para verificar a denúncia; o registro é apagado em poucos dias.',
@@ -79,6 +84,7 @@ PRIVACY = {
  ('Ce que le jeu garde sur son serveur', [
   'Ton pseudo, et un code aléatoire créé par ton appareil pour que tes résultats restent les tiens.',
   'Tes résultats dans les salons publics : victoires, parties, lignes, pièces par minute et statistiques similaires, et si tu joues sur téléphone ou ordinateur.',
+  'Des totaux quotidiens pour faire tourner le jeu : quels codes de joueur aléatoires ont joué chaque jour, combien de parties et pendant combien de temps (conservé 35 jours), et combien de joueurs venaient de chaque pays. Le pays est déduit de ton adresse internet, qui n’est pas conservée.',
   'Si tu te connectes avec Apple, Google ou Microsoft : lequel tu as utilisé et un code brouillé qui représente ton compte. Nous ne demandons ni ne recevons jamais ton e-mail ni ton nom.',
   'Signalements : quand un joueur en signale un autre, les deux codes aléatoires, le motif et l’heure, gardés 30 jours.',
   'Le chat n’est pas conservé. Quand quelqu’un est signalé, les 20 dernières lignes du chat du salon vont dans le journal du serveur pour vérifier le signalement ; ce journal est effacé au bout de quelques jours.',
@@ -99,6 +105,7 @@ PRIVACY = {
  ('Was das Spiel auf seinem Server speichert', [
   'Deinen Spitznamen und einen Zufallscode, den dein Gerät erzeugt, damit deine Ergebnisse dir gehören.',
   'Deine Ergebnisse in öffentlichen Räumen: Siege, Spiele, Reihen, Teile pro Minute und ähnliche Spielwerte, und ob du auf einem Handy oder Computer spielst.',
+  'Tägliche Summen für den Betrieb des Spiels: welche zufälligen Spielercodes an jedem Tag gespielt haben, wie viele Spiele und wie lange (35 Tage aufbewahrt), und wie viele Spieler aus welchem Land kamen. Das Land wird aus deiner Internetadresse abgeleitet, die nicht gespeichert wird.',
   'Wenn du dich mit Apple, Google oder Microsoft anmeldest: welchen Dienst du genutzt hast und einen verschlüsselten Code für dein Konto. Wir fragen nie nach deiner E-Mail oder deinem Namen und erhalten sie nicht.',
   'Meldungen: Wenn ein Spieler einen anderen meldet, die beiden Zufallscodes, der Grund und die Uhrzeit, 30 Tage lang.',
   'Der Chat wird nicht gespeichert. Wird jemand gemeldet, gehen die letzten 20 Chatzeilen des Raums ins Server-Protokoll, damit die Meldung geprüft werden kann; das Protokoll wird nach wenigen Tagen gelöscht.',
@@ -307,7 +314,7 @@ def page(name, data, title_key, updated=UPDATED, contact_first=False):
 </html>
 '''
 CONTACT = sys.argv[2]
-open(f'{OUT}/privacy.html', 'w').write(page('privacy', PRIVACY, 'privacy'))
+open(f'{OUT}/privacy.html', 'w').write(page('privacy', PRIVACY, 'privacy', PRIVACY_UPDATED))
 open(f'{OUT}/terms.html', 'w').write(page('terms', TERMS, 'terms'))
 open(f'{OUT}/support.html', 'w').write(page('support', SUPPORT, 'support', SUPPORT_UPDATED, contact_first=True))
 print('written')

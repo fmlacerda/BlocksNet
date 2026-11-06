@@ -62,6 +62,7 @@ async function emptyRoom(n) {
 // Opens the game with a nickname, sound/fullscreen out of the way, and collects page errors.
 async function openGame(browser, name, contextOpts = {}) {
   const context = await browser.newContext({ viewport: { width: 393, height: 852 }, ...contextOpts });
+  await catchPlayed(context);
   // The one-time online rules are already accepted (tests of the rules sheet use their own pages).
   await context.addInitScript(() => { try { if (!localStorage.getItem('rb.terms')) localStorage.setItem('rb.terms', JSON.stringify('2026-10')); } catch (e) { /* no storage */ } });
   await muteSound(context);
@@ -72,6 +73,18 @@ async function openGame(browser, name, contextOpts = {}) {
   await page.fill('#rb-name', name);
   await page.evaluate(() => { const f = document.getElementById('rb-fs'); if (f) f.checked = false; });
   return page;
+}
+
+// Finished games the game reports for the daily totals (POST /stats/played) are answered here,
+// at once, and kept in context.played. The tests close pages right after a game ends, and the Linux
+// build of Safari's engine crashed when a page closed with that request still on its way.
+// (tests/e2e/report.spec.js checks the server side of these reports.)
+async function catchPlayed(context) {
+  context.played = [];
+  await context.route('**/stats/played', route => {
+    context.played.push(route.request().postDataJSON());
+    return route.fulfill({ status: 204, headers: { 'Access-Control-Allow-Origin': '*' } });
+  });
 }
 
 // The CI machines have no sound card, and Safari's engine there crashes now and then while
@@ -109,4 +122,4 @@ async function gameOver(...pages) {
   for (const p of pages) await p.waitForFunction(() => !RB.current.room.running, null, { timeout: 120000 });
 }
 
-module.exports = { BASE, GAME_URL, PROTO, VERSION, WS, sleep, client, lobby, roomCard, emptyRoom, openGame, muteSound, joinPublicRoom, hostStart, knockOut, autoplay, gameOver };
+module.exports = { BASE, GAME_URL, PROTO, VERSION, WS, sleep, client, lobby, roomCard, emptyRoom, openGame, muteSound, catchPlayed, joinPublicRoom, hostStart, knockOut, autoplay, gameOver };

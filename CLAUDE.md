@@ -42,6 +42,10 @@ The owner is not a developer: explain outcomes in plain words, and ask before an
   backwards compatible, since old app versions stay in use for weeks. Raise `MIN_CLIENT_VERSION`
   in `server/worker.js` only when old versions really can't play correctly any more.
 - Crash reports from players' devices land in the Worker log (`/errors`); limits are in `LIMITS`.
+- Daily report: games end → `addPlayed` daily totals (online games on the server; offline, private and
+  Practice games reported by the game to `/stats/played`). A cron (`wrangler.jsonc`) sends yesterday's
+  numbers to the owner's Telegram; secrets `TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHAT_ID` in Cloudflare.
+  `/report/test?chat=<chat id>` sends today's numbers so far. Never add names or emails to it.
 - Names: global namespace `RB`, CSS classes and ids `rb-…`, storage keys `rb.…`.
   Brand colours are CSS variables at the top of `css/common.css`; block and special colours
   (engine `COLORS`, `SPECIAL_INFO`) are part of the game and stay as they are.
