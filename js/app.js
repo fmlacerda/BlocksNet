@@ -442,7 +442,7 @@
     const fmtTime = ms => { const sec = Math.round(ms / 1000); return `${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, '0')}`; };
     const SUM_COLORS = ['#4DA3FF', '#FF9A3D', '#C6FF3D', '#FF5FA8', '#3DFFE0', '#B28CFF'];
     const roomName = () => (session && session.public ? $('rb-code-show').textContent : t('lobby.private'));
-    const homeLink = () => (location.hostname.endsWith('rowbusters.com') ? 'rowbusters.com' : location.origin + location.pathname);
+    const homeLink = () => { const l = RB.net.pageLink(); return new URL(l).hostname.endsWith('rowbusters.com') ? 'rowbusters.com' : l; };
 
     // Everything the summary shows, worked out from the rounds: one entry per player (matched by
     // nickname; bots keep their names in a room) and one per game.
