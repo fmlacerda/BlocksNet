@@ -1,7 +1,7 @@
 {
   "name": "rowbusters",
   "private": true,
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Rowbusters: multiplayer block-dropping game (web + phone apps). The game itself needs no build step.",
   "scripts": {
     "dev": "wrangler dev --port 8787",
