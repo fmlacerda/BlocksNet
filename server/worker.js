@@ -145,8 +145,11 @@ async function telegram(env, method, body) {
 async function sendReport(env, offset) {
   if (!env.TELEGRAM_BOT_TOKEN || !ownerChat(env)) { console.log('daily report: Telegram is not set up'); return { sent: false, reason: 'not set up' }; }
   const hub = env.HUB.get(env.HUB.idFromName('main'));
-  const text = await hub.dailyReport(dayKey(env, offset), dayKey(env, offset - 1), offset === 0);
-  return { sent: await telegram(env, 'sendMessage', { chat_id: ownerChat(env), text, parse_mode: 'HTML', disable_web_page_preview: true }) };
+  const day = dayKey(env, offset);
+  const text = await hub.dailyReport(day, dayKey(env, offset - 1), offset === 0);
+  const sent = await telegram(env, 'sendMessage', { chat_id: ownerChat(env), text, parse_mode: 'HTML', disable_web_page_preview: true });
+  console.log(`daily report for ${day}${offset === 0 ? ' (so far)' : ''}: ${sent ? 'sent' : 'NOT sent'}`);   // visible in Cloudflare's logs
+  return { sent };
 }
 
 // The secret part of the address Telegram delivers the bot's messages to, made from the bot token
