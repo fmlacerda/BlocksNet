@@ -85,6 +85,13 @@ test('public room: chat, host-only start, stats card, summary and Copy image (ro
   await guest.press('#rb-chat-in', 'Enter');
   await expect(host.locator('#rb-chat')).toContainText('<Gus> ready!');
 
+  // Invite shares a link to this room on the page's own address (the app uses rowbusters.com).
+  await host.evaluate(() => { navigator.share = async d => { window.rbShared = d; }; });
+  await host.click('#rb-share');
+  const shared = await host.waitForFunction(() => window.rbShared).then(h => h.jsonValue());
+  expect(new URL(shared.url).searchParams.get('room')).toBe('1');
+  expect(shared.url.startsWith(new URL(host.url()).origin + '/?')).toBe(true);
+
   for (let g = 1; g <= 2; g++) {
     await hostStart(host, 1, [guest]);
     await autoplay(host, guest);

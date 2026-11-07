@@ -65,6 +65,9 @@
   const rid = () => Math.random().toString(36).slice(2, 10);
 
   const params = new URLSearchParams(location.search);
+  // The page's own address, for links shared with others. Inside the iPhone app the page lives at
+  // capacitor://localhost, which nobody else can open, so links point to the website instead.
+  const pageLink = () => (/^https?:$/.test(location.protocol) ? location.origin + location.pathname : 'https://rowbusters.com/');
   const JOIN_TIMEOUT = 20000;
   const t = (key, p) => RB.t(key, p);
   const noDirect = () => t('net.noDirect');
@@ -586,8 +589,7 @@
     }
 
     inviteLink() {
-      const u = new URL(location.href);
-      u.search = '';
+      const u = new URL(pageLink());
       u.searchParams.set('join', this.code);
       for (const k of ['net', 'peerhost', 'peerport', 'peersecure', 'peerpath']) if (params.get(k)) u.searchParams.set(k, params.get(k));
       return u.toString();
@@ -842,8 +844,7 @@
       this.emit('chat', { name: this.name, text: t });
     }
     inviteLink() {
-      const u = new URL(location.href);
-      u.search = '';
+      const u = new URL(pageLink());
       u.searchParams.set('room', this.room);
       if (params.get('server')) u.searchParams.set('server', params.get('server'));
       return u.toString();
@@ -859,5 +860,5 @@
     }
   }
 
-  RB.net = { Session, ServerSession, fetchLobby, serverURL, playerId, deviceKind, transport: transport.name, cleanCode, cleanName, PROTO, diag: () => DIAG.join('\n'), note };
+  RB.net = { Session, ServerSession, fetchLobby, serverURL, playerId, deviceKind, transport: transport.name, pageLink, cleanCode, cleanName, PROTO, diag: () => DIAG.join('\n'), note };
 })(window.RB);
